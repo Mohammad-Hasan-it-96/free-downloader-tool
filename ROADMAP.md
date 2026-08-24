@@ -60,12 +60,14 @@ This is the main request.
   accident — the new file becomes `name (1).ext`.
 - ✅ **Live progress**: percent, downloaded / total, speed, and time left.
 
-## Phase 2 — One smart "Download" option
+## Phase 2 — One smart "Download" option ✅
 
-- ⬜ Paste any URL into **one** menu item. The tool decides by itself:
+- ✅ Paste any URL into **one** menu item. The tool decides by itself:
   a media page goes to yt-dlp, a direct file link goes to the file downloader.
-- ⬜ If one engine fails, try the other before giving up.
-- ⬜ yt-dlp results also land in the right folder (`Videos` or `Audio`).
+  It shows what it decided and why, and you can change it with one key.
+- ✅ If one engine fails, it offers the other before giving up.
+- ✅ yt-dlp results also land in the right folder (`Videos` or `Audio`).
+- ✅ The queue uses the same rules, so it never saves a web page as a file.
 
 ## Phase 3 — Speed ✅
 
@@ -136,5 +138,5 @@ These are useful, but they are not needed for a good tool. They go last.
 1. ✅ Phase 0 + Phase 1 — the restructure and the main feature.
 2. ✅ Phase 4 — queue and history.
 3. ✅ Phase 3 — speed.
-4. 🔨 Phase 2 — one smart "Download" option.
-5. Phase 5, 6, 7 — polish, safety, and packaging.
+4. ✅ Phase 2 — one smart "Download" option.
+5. 🔨 Phase 5, 6, 7 — polish, safety, and packaging.

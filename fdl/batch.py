@@ -5,13 +5,11 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import http_engine, ytdlp_engine
+from . import http_engine, router, ytdlp_engine
 from .categories import category_for
 from .history import STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED
 from .http_engine import DownloadError
-
-KIND_FILE = "file"
-KIND_MEDIA = "media"
+from .router import KIND_FILE, KIND_MEDIA
 
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"
@@ -67,7 +65,9 @@ def read_url_list(path):
 
 
 def classify(url):
-    """Decide which engine should handle this URL."""
+    """Decide which engine should handle this URL, without asking a server."""
+    if router.looks_like_a_file_name(url):
+        return KIND_FILE
     if ytdlp_engine.looks_like_media_site(url):
         return KIND_MEDIA
     return KIND_FILE
@@ -87,7 +87,8 @@ def dedupe(urls):
 def prepare(urls, cfg, history=None, workers=4, on_checked=None):
     """Ask every server about its file, and mark links we already have.
 
-    Media links are not probed, because yt-dlp decides the name itself.
+    A link that turns out to be a web page is moved to yt-dlp, so the queue
+    never saves an HTML page as if it were the file you wanted.
     """
     items = [Item(url=url, kind=classify(url)) for url in dedupe(urls)]
 
@@ -116,6 +117,14 @@ def _prepare_one(item, cfg, history):
         item.status = STATUS_FAILED
         item.error = str(err)
         item.name = item.url
+        return item
+
+    # A page, not a file. yt-dlp has a much better chance with it.
+    if (router.content_type_of(item.info) in router.HTML_TYPES
+            and not router.looks_like_a_file_name(item.url)):
+        item.kind = KIND_MEDIA
+        item.info = None
+        item.note = "looks like a web page, so yt-dlp will handle it"
         return item
 
     item.name = item.info.filename

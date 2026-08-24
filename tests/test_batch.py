@@ -264,3 +264,54 @@ def test_sha256_of_queue_results_matches(server, cfg, tmp_path):
         expected = hashlib.sha256(FILES["/" + item.name]).hexdigest()
         actual = hashlib.sha256(item.path.read_bytes()).hexdigest()
         assert actual == expected, item.name
+
+
+# ------------------------- routing inside the queue --------------------- #
+
+def test_queue_moves_a_web_page_link_to_ytdlp(server, cfg, monkeypatch):
+    """A link with no extension that serves HTML must not be saved as a file."""
+    from fdl import http_engine
+    from fdl.http_engine import RemoteInfo
+
+    real_probe = http_engine.probe
+
+    def fake_probe(url, *args, **kwargs):
+        if url.endswith("/page"):
+            return RemoteInfo(url=url, size=500, resumable=True,
+                              filename="page", content_type="text/html")
+        return real_probe(url, *args, **kwargs)
+
+    monkeypatch.setattr(http_engine, "probe", fake_probe)
+    items = batch.prepare([f"{server}/page", f"{server}/song.mp3"], cfg)
+    by_url = {item.url: item for item in items}
+
+    page = by_url[f"{server}/page"]
+    assert page.kind == KIND_MEDIA
+    assert page.info is None
+    assert "web page" in page.note
+
+    assert by_url[f"{server}/song.mp3"].kind == KIND_FILE
+
+
+def test_queue_keeps_a_real_file_even_when_the_name_has_no_extension(
+        server, cfg, monkeypatch):
+    from fdl import http_engine
+    from fdl.http_engine import RemoteInfo
+
+    real_probe = http_engine.probe
+
+    def fake_probe(url, *args, **kwargs):
+        if url.endswith("/get"):
+            return RemoteInfo(url=url, size=500, resumable=True,
+                              filename="get",
+                              content_type="application/octet-stream")
+        return real_probe(url, *args, **kwargs)
+
+    monkeypatch.setattr(http_engine, "probe", fake_probe)
+    items = batch.prepare([f"{server}/get"], cfg)
+    assert items[0].kind == KIND_FILE
+
+
+def test_classify_prefers_a_file_extension_over_a_media_site():
+    url = "https://archive.org/download/item/tool.zip"
+    assert batch.classify(url) == KIND_FILE

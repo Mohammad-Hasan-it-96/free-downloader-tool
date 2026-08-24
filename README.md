@@ -2,7 +2,7 @@
 
 A download manager for the terminal.
 
-It does two jobs:
+Paste any link. The tool works out what it is:
 
 1. **Media sites** — YouTube and 1000+ other sites, through
    [yt-dlp](https://github.com/yt-dlp/yt-dlp). You pick the quality.
@@ -20,13 +20,12 @@ Sort by type : on    At once: 3
 ffmpeg       : ready    deno: ready    aria2c: ready
 Cookies from : off
 
-  1. Download from a site (video / audio)
-  2. Download a direct link
-  3. Download many links (queue)
-  4. Resume unfinished downloads
-  5. History
-  6. Settings
-  7. Tools
+  1. Download (paste any link)
+  2. Download many links (queue)
+  3. Resume unfinished downloads
+  4. History
+  5. Settings
+  6. Tools
   0. Exit
 ```
 
@@ -51,6 +50,8 @@ Cookies from : off
   download at the same time, each with its own progress line.
 - **History.** Every download is recorded, and a link you already have is
   marked "skip" instead of downloading twice.
+- **One Download option.** Paste any link. The tool picks the right engine,
+  says why, and lets you change it. If one engine fails, it offers the other.
 - **Asks before playlists**, so one link does not pull 200 videos.
 - **Works without ffmpeg**, with a lower-quality fallback.
 
@@ -100,10 +101,34 @@ python -m fdl
 python video_downloader.py
 ```
 
-## Downloading a direct link
+## Downloading one link
 
-Choose option **2** and paste the link. Before anything is saved, the tool
-shows you what it found:
+Choose option **1** and paste any link. You do not choose the engine — the
+tool works it out and tells you:
+
+```
+  This looks like : a direct file link
+  Because         : the link ends in a file name
+
+  Press Enter to continue, or type 'o' to use a video / audio page (yt-dlp).
+```
+
+Press Enter to accept, or `o` to use the other engine. If the chosen engine
+fails, the tool offers the other one before giving up.
+
+**How it decides**, in this order:
+
+1. The link path ends in a known extension (`.zip`, `.exe`, `.mp4`, …) →
+   direct file. This wins even on a site yt-dlp knows, so
+   `archive.org/download/item/tool.zip` is treated as a zip, not a video page.
+2. yt-dlp has a real extractor for the site (YouTube, Vimeo, …) → media page.
+3. Otherwise the server is asked. If it answers with a web page, yt-dlp gets
+   it. If it answers with a file, the file downloader gets it.
+
+Rule 3 is why a link with no extension is never saved as an HTML error page
+by mistake.
+
+Before anything is saved, a direct file shows you what was found:
 
 ```
   Name     : python-3.12.0-embed-amd64.zip
@@ -115,12 +140,12 @@ shows you what it found:
 ```
 
 While a download runs, the file is written as `name.part`. If you press
-`Ctrl+C`, or the connection dies, that part is kept. Use option **4**,
+`Ctrl+C`, or the connection dies, that part is kept. Use option **3**,
 **Resume unfinished downloads**, to continue it later.
 
 ## Downloading many links at once
 
-Choose option **3**, then paste your links, one per line. An empty line
+Choose option **2**, then paste your links, one per line. An empty line
 finishes the list. You can also type the path of a `.txt` file that holds the
 links, one per line.
 
@@ -192,7 +217,7 @@ download starts again instead of making a damaged file.
 
 ## History
 
-Option **5** shows the last 20 downloads: name, time, size, folder, and any
+Option **4** shows the last 20 downloads: name, time, size, folder, and any
 error. Links that were downloaded before are skipped automatically, as long
 as the file is still on the disk. The history is stored in `history.json`
 next to the app, and you can clear it from the same screen.
@@ -265,6 +290,7 @@ automatically, and you are told once what changed.
 ```
 fdl/
   app.py            the menu
+  router.py         decides which engine a link needs
   batch.py          the queue: check links, download many at once
   history.py        the record of what was downloaded
   multiprogress.py  one progress line per download
@@ -290,8 +316,9 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 132 tests cover file naming, categories, settings, history, the
-queue, the speed limit, multi-connection downloads, and real resume —
+needed. 152 tests cover file naming, categories, settings, history, the
+queue, link routing, the speed limit, multi-connection downloads, and real
+resume —
 including a server that cuts the connection in the middle, and the check that
 a split part file is never continued the wrong way.
 
@@ -303,7 +330,7 @@ a split part file is never continued the wrong way.
 | "yt-dlp is NOT installed" | Say yes to the install question, or run the command it prints. |
 | Download fails on YouTube | Update yt-dlp (Tools), then set a cookies browser (Settings). |
 | "Cannot use the folder" | The drive or path does not exist. Change it in Settings. |
-| A download keeps stopping | Run it again, or use option 4. It continues from the last byte. |
+| A download keeps stopping | Run it again, or use option 3. It continues from the last byte. |
 | Link needs a login (401/403) | The tool cannot download it without your cookies or a token. |
 
 ## Roadmap

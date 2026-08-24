@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import aria2_engine, batch, http_engine, ytdlp_engine
+from . import aria2_engine, batch, http_engine, router, ytdlp_engine
 from .batch import KIND_FILE, KIND_MEDIA
 from .categories import CATEGORY_ORDER, category_for
 from .config import BROWSERS, Config
@@ -83,17 +83,73 @@ def _speed_plan(cfg, toolbox, info):
     return f"1 connection{limit}"
 
 
+# ------------------------- one smart download --------------------------- #
+
+KIND_NAMES = {
+    router.KIND_MEDIA: "a video / audio page (yt-dlp)",
+    router.KIND_FILE: "a direct file link",
+}
+
+
+def download_any(cfg, toolbox, history, url):
+    """One option for any link. The tool picks the engine, you can change it."""
+    print(yellow("\nChecking the link..."))
+    route = router.decide(url)
+
+    print()
+    print(f"  This looks like : {cyan(KIND_NAMES[route.kind])}")
+    print(f"  Because         : {grey(route.reason)}")
+    if route.error:
+        print(f"  Note            : {yellow(route.error)}")
+
+    other = KIND_NAMES[route.other_kind]
+    print(grey(f"\n  Press Enter to continue, or type 'o' to use {other}."))
+    answer = input(bold("  Choice [Enter]: ")).strip().lower()
+    kind = route.other_kind if answer == "o" else route.kind
+    info = route.info if kind == route.kind else None
+
+    if route.error and kind == route.kind and kind == router.KIND_FILE:
+        # The check already failed. Asking the same server again would only
+        # print the same error twice.
+        print(red(f"\n{route.error}"))
+        history.add(url, STATUS_FAILED, error=route.error)
+        worked = False
+    else:
+        worked = _run_kind(cfg, toolbox, history, url, kind, info)
+    if worked:
+        return
+
+    # The first engine did not manage. The other one may still do it.
+    fallback = (router.KIND_FILE if kind == router.KIND_MEDIA
+                else router.KIND_MEDIA)
+    print()
+    if not ask_yes_no(f"That did not work. Try it as {KIND_NAMES[fallback]}?",
+                      default_no=False):
+        return
+    _run_kind(cfg, toolbox, history, url, fallback, None)
+
+
+def _run_kind(cfg, toolbox, history, url, kind, info):
+    if kind == router.KIND_MEDIA:
+        return bool(download_media(cfg, toolbox, history, url))
+    return bool(download_file(cfg, toolbox, history, url, info=info))
+
+
 # --------------------------- one direct link ---------------------------- #
 
-def download_file(cfg, toolbox, history, url):
-    """Download a direct link, sorted into the folder for its type."""
-    print(yellow("\nAsking the server about this file..."))
-    try:
-        info = http_engine.probe(url)
-    except DownloadError as err:
-        print(red(f"\n{err}"))
-        history.add(url, STATUS_FAILED, error=str(err))
-        return
+def download_file(cfg, toolbox, history, url, info=None, ask_first=True):
+    """Download a direct link, sorted into the folder for its type.
+
+    Returns the saved path, or None when it did not work.
+    """
+    if info is None:
+        print(yellow("\nAsking the server about this file..."))
+        try:
+            info = http_engine.probe(url)
+        except DownloadError as err:
+            print(red(f"\n{err}"))
+            history.add(url, STATUS_FAILED, error=str(err))
+            return None
 
     category = category_for(info.filename, info.content_type)
     dest_dir = cfg.folder_for(category)
@@ -117,11 +173,11 @@ def download_file(cfg, toolbox, history, url):
         print(yellow(f"  Note     : you downloaded this before, to "
                      f"{earlier['path']}"))
 
-    if not ask_yes_no("\nStart the download?", default_no=False):
+    if ask_first and not ask_yes_no("\nStart the download?", default_no=False):
         print(red("Cancelled."))
-        return
+        return None
 
-    _run_file_download(cfg, toolbox, history, url, dest_dir, info)
+    return _run_file_download(cfg, toolbox, history, url, dest_dir, info)
 
 
 def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
@@ -352,6 +408,13 @@ def resume_unfinished(cfg, toolbox, history):
 # ------------------------------ media sites ----------------------------- #
 
 def download_media(cfg, toolbox, history, url):
+    """Download with yt-dlp. Returns True when it worked."""
+    if not ytdlp_installed():
+        print(red("\nyt-dlp is not installed, so media pages cannot be "
+                  "downloaded."))
+        print(yellow("Install it from the Tools menu."))
+        return False
+
     selector, height = ytdlp_engine.choose_quality()
     category = "Audio" if ytdlp_engine.is_audio_choice(selector) else "Videos"
     dest_dir = cfg.folder_for(category)
@@ -361,7 +424,7 @@ def download_media(cfg, toolbox, history, url):
         print(red(f"\nCannot use the save folder: {dest_dir}"))
         print(red(f"Reason: {reason}"))
         print(yellow("Change it in Settings."))
-        return
+        return False
 
     if selector == "MANUAL":
         ytdlp_engine.list_formats(url, toolbox, cfg.cookies_browser)
@@ -370,7 +433,7 @@ def download_media(cfg, toolbox, history, url):
     args = ytdlp_engine.build_args(url, dest_dir, selector, height,
                                    toolbox.has_ffmpeg, extra)
     if args is None:
-        return
+        return False
 
     print(green(f"\nDownloading to: {dest_dir}\n"))
     result = ytdlp_engine.run(args, toolbox, cfg.cookies_browser)
@@ -378,13 +441,15 @@ def download_media(cfg, toolbox, history, url):
         print(green(f"\n[DONE] Saved to {dest_dir}"))
         history.add(url, STATUS_DONE, path=dest_dir, category=category,
                     engine="yt-dlp")
-    else:
-        print(red("\n[FAILED] yt-dlp reported an error."))
-        history.add(url, STATUS_FAILED, category=category, engine="yt-dlp",
-                    error=f"yt-dlp exit code {result.returncode}")
-        if not cfg.cookies_browser:
-            print(yellow("If YouTube says 'Sign in to confirm you're not a "
-                         "bot', set a cookies browser in Settings."))
+        return True
+
+    print(red("\n[FAILED] yt-dlp reported an error."))
+    history.add(url, STATUS_FAILED, category=category, engine="yt-dlp",
+                error=f"yt-dlp exit code {result.returncode}")
+    if not cfg.cookies_browser:
+        print(yellow("If YouTube says 'Sign in to confirm you're not a "
+                     "bot', set a cookies browser in Settings."))
+    return False
 
 
 # ------------------------------- history -------------------------------- #
@@ -680,13 +745,12 @@ def draw_header(cfg, toolbox):
 
 
 MENU = [
-    ("1", "Download from a site (video / audio)"),
-    ("2", "Download a direct link"),
-    ("3", "Download many links (queue)"),
-    ("4", "Resume unfinished downloads"),
-    ("5", "History"),
-    ("6", "Settings"),
-    ("7", "Tools"),
+    ("1", "Download (paste any link)"),
+    ("2", "Download many links (queue)"),
+    ("3", "Resume unfinished downloads"),
+    ("4", "History"),
+    ("5", "Settings"),
+    ("6", "Tools"),
     ("0", "Exit"),
 ]
 
@@ -717,25 +781,20 @@ def main():
         if choice == "1":
             url = ask_url()
             if url:
-                download_media(cfg, toolbox, history, url)
+                download_any(cfg, toolbox, history, url)
             pause()
         elif choice == "2":
-            url = ask_url()
-            if url:
-                download_file(cfg, toolbox, history, url)
-            pause()
-        elif choice == "3":
             download_queue(cfg, toolbox, history)
             pause()
-        elif choice == "4":
+        elif choice == "3":
             resume_unfinished(cfg, toolbox, history)
             pause()
-        elif choice == "5":
+        elif choice == "4":
             show_history(history)
             pause()
-        elif choice == "6":
+        elif choice == "5":
             settings_screen(cfg, toolbox)
-        elif choice == "7":
+        elif choice == "6":
             tools_screen(cfg, toolbox)
         elif choice == "0":
             print("Bye!")
