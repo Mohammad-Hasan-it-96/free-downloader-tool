@@ -28,6 +28,8 @@ def defaults():
         "category_folders": {name: name for name in CATEGORY_ORDER},
         "cookies_browser": "",
         "retries": 5,
+        "max_parallel": 3,
+        "history_limit": 500,
         "notice": "",
     }
 
@@ -106,6 +108,18 @@ class Config:
     def retries(self):
         return self.data["retries"]
 
+    @property
+    def max_parallel(self):
+        return self.data["max_parallel"]
+
+    @max_parallel.setter
+    def max_parallel(self, value):
+        self.data["max_parallel"] = max(1, min(8, int(value)))
+
+    @property
+    def history_limit(self):
+        return self.data["history_limit"]
+
     def take_notice(self):
         """Return a one-time message and clear it."""
         message = self.data.get("notice", "")
@@ -150,6 +164,14 @@ def _validated(raw):
     retries = raw.get("retries")
     if isinstance(retries, int) and not isinstance(retries, bool):
         result["retries"] = max(0, min(20, retries))
+
+    parallel = raw.get("max_parallel")
+    if isinstance(parallel, int) and not isinstance(parallel, bool):
+        result["max_parallel"] = max(1, min(8, parallel))
+
+    limit = raw.get("history_limit")
+    if isinstance(limit, int) and not isinstance(limit, bool):
+        result["history_limit"] = max(0, min(10000, limit))
 
     notice = raw.get("notice")
     if isinstance(notice, str):

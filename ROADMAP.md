@@ -15,32 +15,32 @@ Legend: ✅ done · 🔨 in progress · ⬜ planned
 
 ---
 
-## Phase 0 — Groundwork
+## Phase 0 — Groundwork ✅
 
 Nothing new for the user, but everything after this depends on it.
 
-- ⬜ Split the single script into a package: `fdl/`
+- ✅ Split the single script into a package: `fdl/`
   (`config`, `categories`, `naming`, `tools`, `progress`, engines, `app`).
-- ⬜ New settings format (version 2) with a safe upgrade from the old
+- ✅ New settings format (version 2) with a safe upgrade from the old
   `config.json`. Old values are never lost without telling the user.
-- ⬜ Remove Windows-only assumptions, so it also runs on Linux and macOS.
-- ⬜ Add a `tests/` folder and the first tests.
-- ⬜ Keep `Download Video.bat` working during the change.
+- ✅ Remove Windows-only assumptions, so it also runs on Linux and macOS.
+- ✅ Add a `tests/` folder and the first tests.
+- ✅ Keep `Download Video.bat` working during the change.
 
-## Phase 1 — Direct file downloads, resume, and type folders
+## Phase 1 — Direct file downloads, resume, and type folders ✅
 
 This is the main request.
 
-- ⬜ **Direct link downloader** in pure Python (`urllib`, no extra install):
+- ✅ **Direct link downloader** in pure Python (`urllib`, no extra install):
   `.exe`, `.zip`, `.pdf`, `.iso`, anything.
-- ⬜ **Auto-resume.** The file is written as `name.part`. If the download stops,
+- ✅ **Auto-resume.** The file is written as `name.part`. If the download stops,
   the next run sends an HTTP `Range` header and continues from that byte.
-- ⬜ **Safe resume.** A small sidecar file remembers the URL, the size, and the
+- ✅ **Safe resume.** A small sidecar file remembers the URL, the size, and the
   server `ETag`. If the file on the server changed, the download restarts
   instead of producing a broken file.
-- ⬜ **Retry with backoff.** Network errors retry a few times, each time waiting
+- ✅ **Retry with backoff.** Network errors retry a few times, each time waiting
   a bit longer, and each retry continues where it stopped.
-- ⬜ **Folders by type.** Files are sorted automatically:
+- ✅ **Folders by type.** Files are sorted automatically:
 
   | Folder | Examples |
   |---|---|
@@ -54,11 +54,11 @@ This is the main request.
   | `Other` | everything else |
 
   Sorting can be turned off, and every folder name can be changed.
-- ⬜ **Good file names.** The name comes from the `Content-Disposition` header
+- ✅ **Good file names.** The name comes from the `Content-Disposition` header
   first, then from the URL. Illegal characters are removed. Windows reserved
   names (`CON`, `NUL`, …) are handled. An existing file is never overwritten by
   accident — the new file becomes `name (1).ext`.
-- ⬜ **Live progress**: percent, downloaded / total, speed, and time left.
+- ✅ **Live progress**: percent, downloaded / total, speed, and time left.
 
 ## Phase 2 — One smart "Download" option
 
@@ -76,14 +76,14 @@ This is the main request.
   Only when the server supports `Range`.
 - ⬜ **Speed limit** setting, so a big download does not block your internet.
 
-## Phase 4 — Queue and history
+## Phase 4 — Queue and history ✅
 
-- ⬜ **Queue**: paste many URLs at once, or load a `.txt` list.
-- ⬜ Run several downloads at the same time, with a "how many at once" setting.
-- ⬜ **History file**: URL, saved path, size, date, and status.
-- ⬜ **Resume all unfinished** — one menu item that restarts every broken
+- ✅ **Queue**: paste many URLs at once, or load a `.txt` list.
+- ✅ Run several downloads at the same time, with a "how many at once" setting.
+- ✅ **History file**: URL, saved path, size, date, and status.
+- ✅ **Resume all unfinished** — one menu item that restarts every broken
   download from the last byte.
-- ⬜ **Duplicate check**: warn if this URL, or a file with the same name and
+- ✅ **Duplicate check**: warn if this URL, or a file with the same name and
   size, is already downloaded.
 
 ## Phase 5 — Trust and safety
@@ -131,8 +131,8 @@ These are useful, but they are not needed for a good tool. They go last.
 
 ## Order of work
 
-1. Phase 0 + Phase 1 together — the restructure and the main feature.
-2. Phase 2 — makes the tool feel like one product.
-3. Phase 3 — speed.
-4. Phase 4 — queue and history.
+1. ✅ Phase 0 + Phase 1 — the restructure and the main feature.
+2. ✅ Phase 4 — queue and history.
+3. 🔨 Phase 3 — speed.
+4. Phase 2 — one smart "Download" option.
 5. Phase 5, 6, 7 — polish, safety, and packaging.

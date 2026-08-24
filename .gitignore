@@ -222,3 +222,6 @@ __marimo__/
 
 # User settings, created on first run
 config.json
+
+# Download history, created at runtime
+history.json

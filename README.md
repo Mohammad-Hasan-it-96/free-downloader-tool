@@ -16,20 +16,17 @@ Every file is sorted into a folder by its type, so your downloads stay tidy.
           FREE DOWNLOADER TOOL
 ========================================================
 Base folder  : D:\Downloads
-Sort by type : on
-ffmpeg       : ready
-deno (JS)    : ready
-aria2c       : not installed
+Sort by type : on    At once: 3
+ffmpeg       : ready    deno: ready    aria2c: none
 Cookies from : off
 
-  1. Download video / audio from a site (yt-dlp)
-  2. Download a file from a direct link
-  3. Resume unfinished downloads
-  4. Change base folder
-  5. Turn sorting by file type on / off
-  6. Set browser for cookies (fix 'not a bot')
-  7. Show available formats for a URL
-  8. Update yt-dlp
+  1. Download from a site (video / audio)
+  2. Download a direct link
+  3. Download many links (queue)
+  4. Resume unfinished downloads
+  5. History
+  6. Settings
+  7. Tools
   0. Exit
 ```
 
@@ -45,6 +42,10 @@ Cookies from : off
   the URL. Illegal characters are removed, and an existing file is never
   overwritten by accident.
 - **Live progress**: percent, size, speed, and time left.
+- **A queue.** Paste many links at once, or point at a `.txt` list. Several
+  download at the same time, each with its own progress line.
+- **History.** Every download is recorded, and a link you already have is
+  marked "skip" instead of downloading twice.
 - **Asks before playlists**, so one link does not pull 200 videos.
 - **Works without ffmpeg**, with a lower-quality fallback.
 
@@ -107,8 +108,52 @@ shows you what it found:
 ```
 
 While a download runs, the file is written as `name.part`. If you press
-`Ctrl+C`, or the connection dies, that part is kept. Use option **3**,
+`Ctrl+C`, or the connection dies, that part is kept. Use option **4**,
 **Resume unfinished downloads**, to continue it later.
+
+## Downloading many links at once
+
+Choose option **3**, then paste your links, one per line. An empty line
+finishes the list. You can also type the path of a `.txt` file that holds the
+links, one per line.
+
+The tool checks every link first and shows a plan before anything is saved:
+
+```
+Plan:
+  1. python-3.12.0-embed-amd64.zip
+      10.5 MB -> D:\Downloads\Archives
+  2. README.md
+      174.9 KB -> D:\Downloads\Documents
+  3. skip  song.mp3
+      already downloaded to D:\Downloads\Audio\song.mp3
+  4. cannot use  https://example.com/gone.zip
+      The file was not found (404).
+
+  Total to download: about 10.7 MB
+```
+
+While the queue runs, each file has its own line:
+
+```
+ > [1] python-3.12.0-embed-amd64.zip    44.4%  4.7 MB  598.1 KB/s  ETA 00:10
+ > [2] README.md                        81.0%  141.7 KB  210.4 KB/s  ETA 00:00
+ - [3] song.mp3                         already downloaded
+ x [4] gone.zip                         The file was not found (404).
+```
+
+One bad link never stops the others. How many run at the same time is a
+setting (1 to 8, default 3).
+
+Media links in a queue are handled one after another, because yt-dlp shows
+its own progress.
+
+## History
+
+Option **5** shows the last 20 downloads: name, time, size, folder, and any
+error. Links that were downloaded before are skipped automatically, as long
+as the file is still on the disk. The history is stored in `history.json`
+next to the app, and you can clear it from the same screen.
 
 ## Playlists
 
@@ -133,8 +178,8 @@ The app does not fail. It changes what it does:
 
 ## Fixing YouTube "Sign in to confirm you're not a bot"
 
-1. Choose menu option **6**, and select the browser where you are logged into
-   YouTube.
+1. Open **Settings**, choose **Browser for cookies**, and select the browser
+   where you are logged into YouTube.
 2. **Fully close that browser.** While it runs, the cookie file is locked.
 3. Download again.
 
@@ -160,7 +205,9 @@ Settings live in `config.json`, next to the app. It is created on first run.
   "sort_by_type": true,
   "category_folders": { "Videos": "Videos", "Audio": "Audio" },
   "cookies_browser": "",
-  "retries": 5
+  "retries": 5,
+  "max_parallel": 3,
+  "history_limit": 500
 }
 ```
 
@@ -173,6 +220,9 @@ automatically, and you are told once what changed.
 ```
 fdl/
   app.py            the menu
+  batch.py          the queue: check links, download many at once
+  history.py        the record of what was downloaded
+  multiprogress.py  one progress line per download
   config.py         settings: load, check, save, upgrade
   categories.py     extension -> folder
   naming.py         safe file names
@@ -192,8 +242,8 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. They cover file naming, categories, settings, and real resume —
-including a server that cuts the connection in the middle.
+needed. They cover file naming, categories, settings, history, the queue, and
+real resume — including a server that cuts the connection in the middle.
 
 ## Troubleshooting
 
@@ -201,9 +251,9 @@ including a server that cuts the connection in the middle.
 |---|---|
 | `ffmpeg : NOT FOUND` in the header | Run `winget install Gyan.FFmpeg`, then restart. |
 | "yt-dlp is NOT installed" | Say yes to the install question, or run the command it prints. |
-| Download fails on YouTube | Update yt-dlp (option 8), then try cookies (option 6). |
-| "Cannot use the folder" | The drive or path does not exist. Use option 4. |
-| A download keeps stopping | Just run it again, or use option 3. It continues from the last byte. |
+| Download fails on YouTube | Update yt-dlp (Tools), then set a cookies browser (Settings). |
+| "Cannot use the folder" | The drive or path does not exist. Change it in Settings. |
+| A download keeps stopping | Run it again, or use option 4. It continues from the last byte. |
 | Link needs a login (401/403) | The tool cannot download it without your cookies or a token. |
 
 ## Roadmap
