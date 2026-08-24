@@ -1,5 +1,7 @@
 # Free Downloader Tool
 
+[![tests](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/actions/workflows/tests.yml/badge.svg)](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/actions/workflows/tests.yml)
+
 A download manager for the terminal.
 
 Paste any link. The tool works out what it is:
@@ -99,15 +101,48 @@ used, which is already much faster than one connection.
 
 ## How to run
 
-On Windows, double-click **`Download Video.bat`**.
+There are three ways.
 
-Or from a terminal:
+**1. Portable, no install.** Download the folder and double-click
+**`Download Video.bat`**, or run:
 
 ```bash
 python -m fdl
 # or
 python video_downloader.py
 ```
+
+Settings stay next to the app, so the whole folder can be copied to a USB
+stick.
+
+**2. Install it with pip.**
+
+```bash
+pip install .
+fdl
+```
+
+This gives you an `fdl` command that works from any folder. An installed copy
+keeps its settings in the normal user folder, never inside Python:
+
+| System | Where the settings go |
+|---|---|
+| Windows | `%APPDATA%\FreeDownloaderTool` |
+| macOS | `~/Library/Application Support/FreeDownloaderTool` |
+| Linux | `~/.config/free-downloader-tool` (or `$XDG_CONFIG_HOME`) |
+
+Set `FDL_HOME` to put them anywhere else.
+
+**3. One `.exe`, for a computer with no Python.**
+
+```bash
+pip install pyinstaller
+python build_exe.py
+```
+
+The result is `dist/FreeDownloader.exe`. Python and yt-dlp are inside it, so
+it is about 30 MB. ffmpeg, deno, and aria2c are **not** inside; the app still
+finds them if they are installed, and says what to do when they are missing.
 
 ## Downloading one link
 
@@ -369,9 +404,9 @@ python -m yt_dlp --cookies cookies.txt -f best <URL>
 
 ## Settings
 
-Settings live in `config.json`, next to the app. It is created on first run.
-Two more files are made next to it while you use the tool: `history.json` and
-`fdl.log`.
+Settings live in `config.json`, created on first run. Two more files sit
+beside it: `history.json` and `fdl.log`. Where that folder is depends on how
+you run the tool — see **How to run** above.
 
 ```json
 {
@@ -407,6 +442,7 @@ fdl/
   postaction.py     open the folder, or make a sound
   checksum.py       reads and compares checksums
   log.py            the log file, with links cleaned
+  paths.py          where settings, history, and the log are kept
   batch.py          the queue: check links, download many at once
   history.py        the record of what was downloaded
   multiprogress.py  one progress line per download
@@ -427,15 +463,14 @@ tests/              pytest suite
 ## Running the tests
 
 ```bash
-pip install pytest
+pip install -e ".[dev]"
 python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 237 tests cover file naming, categories, settings, history, the
+needed. 247 tests cover file naming, categories, settings, history, the
 queue, link routing, safety checks, checksums, the log, the clipboard, the
-proxy, logins in links, the speed limit, multi-connection downloads, and real
-resume —
+proxy, logins in links, the speed limit, multi-connection downloads, where settings are stored, and real resume —
 including a server that cuts the connection in the middle, and the check that
 a split part file is never continued the wrong way.
 
@@ -457,9 +492,9 @@ a split part file is never continued the wrong way.
 
 ## Roadmap
 
-The plan for the next versions is in **[ROADMAP.md](ROADMAP.md)**: faster
-checksum checks, a free space check, clipboard watch, proxy settings, and
-packaging.
+All seven planned phases are done. See **[ROADMAP.md](ROADMAP.md)** for what
+was built and what is still on the "maybe later" list: faster
+torrents through aria2c, a scheduler, and browser integration.
 
 ## Legal note
 

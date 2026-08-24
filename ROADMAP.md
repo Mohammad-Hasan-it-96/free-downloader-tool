@@ -114,13 +114,15 @@ This is the main request.
 - ✅ Per-category custom folders. A plain name goes inside the base folder;
   a full path such as `E:/Programs` is used exactly as written.
 
-## Phase 7 — Packaging and quality
+## Phase 7 — Packaging and quality ✅
 
-- ⬜ `pyproject.toml` and an `fdl` command, so `pip install .` works.
-- ⬜ Full `pytest` suite: naming, categories, config, and resume logic
-  (with a small local test server, no internet needed).
-- ⬜ GitHub Actions CI: run the tests on every push.
-- ⬜ Optional single `.exe` build with PyInstaller, for people without Python.
+- ✅ `pyproject.toml` and an `fdl` command, so `pip install .` works. An
+  installed copy keeps its settings in the user folder, never inside Python.
+- ✅ Full `pytest` suite: 247 tests, with a small local test server, so no
+  internet is needed.
+- ✅ GitHub Actions CI: the tests run on Windows and Linux, on Python 3.9,
+  3.11, and 3.13, and the package is built and checked.
+- ✅ Optional single `.exe` build with PyInstaller, for people without Python.
 
 ## Maybe later
 
@@ -147,4 +149,6 @@ These are useful, but they are not needed for a good tool. They go last.
 4. ✅ Phase 2 — one smart "Download" option.
 5. ✅ Phase 5 — trust and safety.
 6. ✅ Phase 6 — convenience.
-7. 🔨 Phase 7 — packaging and quality.
+7. ✅ Phase 7 — packaging and quality.
+
+All planned phases are done. What is left is in **Maybe later**.

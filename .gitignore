@@ -229,3 +229,8 @@ history.json
 # Log file, created at runtime
 fdl.log
 fdl.log.*
+
+# Build output
+build/
+dist/
+*.egg-info/

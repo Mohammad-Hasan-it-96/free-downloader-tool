@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from fdl.config import Config, defaults, migrate
 
@@ -86,7 +89,8 @@ def test_folder_for_flat_when_sorting_is_off(tmp_path):
     assert cfg.folder_for("Videos") == Path(tmp_path / "dl")
 
 
-def test_migration_from_version_1_video_folder():
+@pytest.mark.skipif(os.name != "nt", reason="uses Windows path rules")
+def test_migration_from_a_windows_video_folder():
     upgraded = migrate({"download_dir": r"D:\Videos",
                         "cookies_browser": "edge"})
     # D:\Videos looks like a category folder, so D:\ becomes the base.
@@ -95,9 +99,19 @@ def test_migration_from_version_1_video_folder():
     assert "D:\\Videos" in upgraded["notice"]
 
 
+def test_migration_from_version_1_video_folder():
+    """A folder named after a category moves up one level."""
+    old = str(Path.home() / "Media" / "Videos")
+    upgraded = migrate({"download_dir": old, "cookies_browser": "edge"})
+    assert upgraded["base_dir"] == str(Path.home() / "Media")
+    assert upgraded["cookies_browser"] == "edge"
+    assert old in upgraded["notice"]
+
+
 def test_migration_from_version_1_other_folder():
-    upgraded = migrate({"download_dir": r"E:\MyStuff"})
-    assert upgraded["base_dir"] == r"E:\MyStuff"
+    old = str(Path.home() / "MyStuff")
+    upgraded = migrate({"download_dir": old})
+    assert upgraded["base_dir"] == old
     assert upgraded["notice"]
 
 
@@ -108,11 +122,12 @@ def test_migration_keeps_defaults_when_empty():
 
 
 def test_load_migrates_old_file(tmp_path):
+    old = str(tmp_path / "Old")
     path = write(tmp_path / "config.json",
-                 {"download_dir": r"E:\Old", "cookies_browser": "firefox"})
+                 {"download_dir": old, "cookies_browser": "firefox"})
     cfg = Config.load(path)
     assert cfg.data["version"] == 2
-    assert cfg.base_dir == r"E:\Old"
+    assert cfg.base_dir == old
     assert cfg.cookies_browser == "firefox"
     assert cfg.take_notice()          # shown once
     assert cfg.take_notice() == ""    # and then cleared

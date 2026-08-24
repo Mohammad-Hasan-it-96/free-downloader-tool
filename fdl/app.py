@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from . import (aria2_engine, batch, checksum, clipboard, http_engine, log,
-               postaction, router, safety, ytdlp_engine)
+               paths, postaction, router, safety, ytdlp_engine)
 from .batch import KIND_FILE, KIND_MEDIA
 from .categories import CATEGORY_ORDER, category_for
 from .config import BROWSERS, Config
@@ -22,10 +22,10 @@ from .term import (ask_yes_no, bold, clear_screen, cyan, enable_colors, green,
 from .segmented import wanted_connections
 from .tools import Toolbox, ytdlp_installed
 
-APP_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = APP_DIR / "config.json"
-HISTORY_PATH = APP_DIR / "history.json"
-LOG_PATH = APP_DIR / "fdl.log"
+APP_DIR = paths.data_dir()
+CONFIG_PATH = paths.config_path()
+HISTORY_PATH = paths.history_path()
+LOG_PATH = paths.log_path()
 TITLE = "FREE DOWNLOADER TOOL"
 
 
