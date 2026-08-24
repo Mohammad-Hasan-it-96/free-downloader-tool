@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .categories import CATEGORY_ORDER
+from .postaction import CHOICES as AFTER_DOWNLOAD_CHOICES
 
 CONFIG_VERSION = 2
 BROWSERS = ["edge", "chrome", "brave", "firefox", "opera", "vivaldi",
@@ -33,6 +34,9 @@ def defaults():
         "speed_limit_kb": 0,
         "use_aria2c": True,
         "history_limit": 500,
+        "proxy": "",
+        "headers": {},
+        "after_download": "nothing",
         "notice": "",
     }
 
@@ -152,6 +156,37 @@ class Config:
     def history_limit(self):
         return self.data["history_limit"]
 
+    @property
+    def proxy(self):
+        return self.data["proxy"]
+
+    @proxy.setter
+    def proxy(self, value):
+        self.data["proxy"] = (value or "").strip()
+
+    @property
+    def headers(self):
+        return dict(self.data["headers"])
+
+    def set_header(self, name, value):
+        name = (name or "").strip()
+        if not name:
+            return False
+        self.data["headers"][name] = str(value)
+        return True
+
+    def remove_header(self, name):
+        return self.data["headers"].pop(name, None) is not None
+
+    @property
+    def after_download(self):
+        return self.data["after_download"]
+
+    @after_download.setter
+    def after_download(self, value):
+        if value in AFTER_DOWNLOAD_CHOICES:
+            self.data["after_download"] = value
+
     def take_notice(self):
         """Return a one-time message and clear it."""
         message = self.data.get("notice", "")
@@ -161,12 +196,27 @@ class Config:
         return message
 
     def folder_for(self, category):
-        """Full folder path for a category, following the sort setting."""
+        """Full folder path for a category, following the sort setting.
+
+        A category folder may be a plain name, joined to the base folder, or
+        a full path such as `E:/Programs`, used exactly as written.
+        """
         base = Path(self.base_dir)
         if not self.sort_by_type:
             return base
         name = self.data["category_folders"].get(category, category)
+        folder = Path(name).expanduser()
+        if folder.is_absolute():
+            return folder
         return base / name
+
+    def set_category_folder(self, category, value):
+        """Set one category folder. An empty value goes back to the default."""
+        if category not in CATEGORY_ORDER:
+            return False
+        value = (value or "").strip()
+        self.data["category_folders"][category] = value or category
+        return True
 
 
 # ---------------------------------------------------------------------- #
@@ -215,6 +265,22 @@ def _validated(raw):
     limit = raw.get("history_limit")
     if isinstance(limit, int) and not isinstance(limit, bool):
         result["history_limit"] = max(0, min(10000, limit))
+
+    proxy = raw.get("proxy")
+    if isinstance(proxy, str):
+        result["proxy"] = proxy.strip()
+
+    headers = raw.get("headers")
+    if isinstance(headers, dict):
+        result["headers"] = {
+            str(key).strip(): str(value)
+            for key, value in headers.items()
+            if str(key).strip() and isinstance(value, (str, int, float))
+        }
+
+    action = raw.get("after_download")
+    if isinstance(action, str) and action in AFTER_DOWNLOAD_CHOICES:
+        result["after_download"] = action
 
     notice = raw.get("notice")
     if isinstance(notice, str):

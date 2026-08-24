@@ -4,10 +4,11 @@ import importlib
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
-from . import (aria2_engine, batch, checksum, http_engine, log, router,
-               safety, ytdlp_engine)
+from . import (aria2_engine, batch, checksum, clipboard, http_engine, log,
+               postaction, router, safety, ytdlp_engine)
 from .batch import KIND_FILE, KIND_MEDIA
 from .categories import CATEGORY_ORDER, category_for
 from .config import BROWSERS, Config
@@ -85,6 +86,46 @@ def _speed_plan(cfg, toolbox, info):
     return f"1 connection{limit}"
 
 
+# --------------------------- clipboard watch ---------------------------- #
+
+WATCH_SECONDS = 1.0
+
+
+def watch_clipboard(cfg, toolbox, history):
+    """Offer to download every new link you copy, until you stop."""
+    # Read once: it both tests the clipboard and gives us the starting text.
+    seen = clipboard.read()
+    if seen is None:
+        print(red("\nThe clipboard cannot be read on this computer."))
+        print(grey("On Linux, install xclip, xsel, or wl-clipboard."))
+        return
+
+    print(bold("\nWatching the clipboard."))
+    print(grey("Copy a link and it will be offered here. "
+               "Press Ctrl+C to stop."))
+    log.info("clipboard watch started")
+
+    try:
+        while True:
+            text = clipboard.read()
+            if text != seen:
+                seen = text
+                if clipboard.looks_like_a_link(text):
+                    link = text.strip()
+                    print(bold(f"\nNew link: {cyan(link)}"))
+                    answer = input(bold("Download it? [Y/n/q]: ")).strip().lower()
+                    if answer.startswith("q"):
+                        break
+                    if not answer or answer.startswith("y"):
+                        download_any(cfg, toolbox, history, link)
+                        print(bold("\nStill watching. Ctrl+C to stop."))
+            time.sleep(WATCH_SECONDS)
+    except KeyboardInterrupt:
+        pass
+    print(yellow("\nStopped watching the clipboard."))
+    log.info("clipboard watch stopped")
+
+
 # ------------------------- one smart download --------------------------- #
 
 KIND_NAMES = {
@@ -147,7 +188,7 @@ def download_file(cfg, toolbox, history, url, info=None, ask_first=True):
     if info is None:
         print(yellow("\nAsking the server about this file..."))
         try:
-            info = http_engine.probe(url)
+            info = http_engine.probe(url, cfg.headers)
         except DownloadError as err:
             print(red(f"\n{err}"))
             history.add(url, STATUS_FAILED, error=str(err))
@@ -288,9 +329,11 @@ def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
             saved = aria2_engine.download(
                 url, dest_dir, info, toolbox=toolbox, name=name,
                 connections=aria2_engine.DEFAULT_CONNECTIONS,
-                speed_limit_kb=cfg.speed_limit_kb, retries=cfg.retries)
+                speed_limit_kb=cfg.speed_limit_kb, retries=cfg.retries,
+                extra_headers=cfg.headers)
         else:
             saved = http_engine.download(url, dest_dir, info, name=name,
+                                         extra_headers=cfg.headers,
                                          retries=cfg.retries,
                                          connections=cfg.connections,
                                          speed_limit=cfg.speed_limit_bytes,
@@ -312,6 +355,7 @@ def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
     log.info("done: %s -> %s", log.redact(url), saved)
     history.add(url, STATUS_DONE, path=saved, size=info.size,
                 category=category)
+    postaction.run(cfg.after_download, saved)
     return saved
 
 
@@ -698,6 +742,115 @@ def change_cookies(cfg):
     _save(cfg, f"Saved. Cookies source: {cfg.cookies_browser or 'None'}")
 
 
+def change_proxy(cfg):
+    current = cfg.proxy or "the computer's own settings"
+    print()
+    print(f"Proxy: {cyan(current)}")
+    print(grey("Leave blank to follow the computer's own proxy settings.\n"
+               "Type 'none' to never use a proxy.\n"
+               "Or type an address, for example  http://10.0.0.1:3128"))
+    value = input(bold("Proxy ('-' to clear, blank to keep): ")).strip()
+    if not value:
+        return
+    cfg.proxy = "" if value == "-" else value
+    applied = http_engine.configure_proxy(cfg.proxy)
+    _save(cfg, f"Saved. Downloads will use: {applied}")
+    log.info("proxy changed to %s", applied)
+
+
+def edit_headers(cfg):
+    """Add or remove headers that are sent with every direct download."""
+    while True:
+        print()
+        headers = cfg.headers
+        if headers:
+            print(bold("Extra headers sent with every direct download:"))
+            for index, (name, value) in enumerate(sorted(headers.items()), 1):
+                shown = value if len(value) <= 50 else value[:47] + "..."
+                print(f"  {cyan(str(index))}. {name}: {grey(shown)}")
+        else:
+            print(yellow("There are no extra headers."))
+            print(grey("A header can unlock a link that needs one, for "
+                       "example  Referer: https://the-site.com/"))
+
+        print(f"\n  {cyan('a')}. Add or change one")
+        print(f"  {cyan('d')}. Delete one")
+        print(f"  {cyan('0')}. Back")
+        choice = input(bold("\nSelect: ")).strip().lower()
+
+        if choice == "a":
+            name = input(bold("Header name (e.g. Referer): ")).strip()
+            if not name:
+                print(red("No name given."))
+                continue
+            value = input(bold(f"Value for {name}: ")).strip()
+            cfg.set_header(name, value)
+            _save(cfg, f"Saved. {name} will be sent with every download.")
+        elif choice == "d":
+            if not headers:
+                continue
+            pick = input(bold("Number to delete: ")).strip()
+            names = sorted(headers)
+            if pick.isdigit() and 1 <= int(pick) <= len(names):
+                gone = names[int(pick) - 1]
+                cfg.remove_header(gone)
+                _save(cfg, f"Removed {gone}.")
+            else:
+                print(red("Invalid choice."))
+        elif choice == "0" or not choice:
+            return
+        else:
+            print(red("Invalid choice."))
+
+
+def edit_category_folders(cfg):
+    """Send one type of file to a folder of its own, even on another drive."""
+    while True:
+        print()
+        print(bold("Folder for each type:"))
+        for index, category in enumerate(CATEGORY_ORDER, 1):
+            value = cfg.data["category_folders"].get(category, category)
+            full = cfg.folder_for(category)
+            mark = green("full path") if Path(value).is_absolute() else ""
+            print(f"  {cyan(str(index))}. {category:<10} {grey(str(full))} "
+                  f"{mark}")
+        print(f"\n  {cyan('0')}. Back")
+        pick = input(bold("\nNumber to change: ")).strip()
+
+        if pick == "0" or not pick:
+            return
+        if not pick.isdigit() or not 1 <= int(pick) <= len(CATEGORY_ORDER):
+            print(red("Invalid choice."))
+            continue
+
+        category = CATEGORY_ORDER[int(pick) - 1]
+        print(grey(f"\nA plain name such as '{category}' goes inside the base "
+                   "folder.\nA full path such as 'E:/Programs' is used "
+                   "exactly as written.\nType '-' to go back to the default."))
+        value = input(bold(f"Folder for {category}: ")).strip().strip('"')
+        if not value:
+            continue
+        cfg.set_category_folder(category, "" if value == "-" else value)
+        _save(cfg, f"{category} now goes to {cfg.folder_for(category)}")
+
+
+def change_after_download(cfg):
+    print()
+    print(f"After a download finishes: {cyan(postaction.CHOICES[cfg.after_download])}")
+    keys = list(postaction.CHOICES)
+    for index, key in enumerate(keys, 1):
+        print(f"  {cyan(str(index))}. {postaction.CHOICES[key]}")
+    pick = input(bold("Select (blank to keep): ")).strip()
+    if not pick:
+        return
+    if not pick.isdigit() or not 1 <= int(pick) <= len(keys):
+        print(red("Invalid choice."))
+        return
+    cfg.after_download = keys[int(pick) - 1]
+    _save(cfg, f"Saved. After a download it will "
+               f"{postaction.CHOICES[cfg.after_download]}.")
+
+
 def _save(cfg, message):
     saved, why = cfg.save()
     if saved:
@@ -709,11 +862,15 @@ def _save(cfg, message):
 SETTINGS_MENU = [
     ("1", "Base folder"),
     ("2", "Sorting by file type (on / off)"),
-    ("3", "Downloads at the same time (the queue)"),
-    ("4", "Connections per file (speed)"),
-    ("5", "Speed limit"),
-    ("6", "Use aria2c when installed (on / off)"),
-    ("7", "Browser for cookies"),
+    ("3", "Folder for each type"),
+    ("4", "Downloads at the same time (the queue)"),
+    ("5", "Connections per file (speed)"),
+    ("6", "Speed limit"),
+    ("7", "Use aria2c when installed (on / off)"),
+    ("8", "Browser for cookies"),
+    ("9", "Proxy"),
+    ("10", "Extra headers"),
+    ("11", "After a download finishes"),
     ("0", "Back"),
 ]
 
@@ -739,6 +896,13 @@ def settings_screen(cfg, toolbox):
         print(f"  Retries per download   : {cyan(str(cfg.retries))}")
         print(f"  Cookies from           : "
               f"{green(cfg.cookies_browser) if cfg.cookies_browser else yellow('off')}")
+        print(f"  Proxy                  : "
+              f"{cyan(cfg.proxy) if cfg.proxy else grey('system settings')}")
+        header_count = len(cfg.headers)
+        print(f"  Extra headers          : "
+              f"{cyan(str(header_count)) if header_count else grey('none')}")
+        print(f"  After a download       : "
+              f"{cyan(postaction.CHOICES[cfg.after_download])}")
         print()
         for key, label in SETTINGS_MENU:
             print(f"  {cyan(key)}. {label}")
@@ -751,19 +915,29 @@ def settings_screen(cfg, toolbox):
             toggle_sorting(cfg)
             pause()
         elif choice == "3":
+            edit_category_folders(cfg)
+        elif choice == "4":
             change_parallel(cfg)
             pause()
-        elif choice == "4":
+        elif choice == "5":
             change_connections(cfg)
             pause()
-        elif choice == "5":
+        elif choice == "6":
             change_speed_limit(cfg)
             pause()
-        elif choice == "6":
+        elif choice == "7":
             toggle_aria2c(cfg, toolbox)
             pause()
-        elif choice == "7":
+        elif choice == "8":
             change_cookies(cfg)
+            pause()
+        elif choice == "9":
+            change_proxy(cfg)
+            pause()
+        elif choice == "10":
+            edit_headers(cfg)
+        elif choice == "11":
+            change_after_download(cfg)
             pause()
         elif choice == "0":
             return
@@ -878,10 +1052,11 @@ def draw_header(cfg, toolbox):
 MENU = [
     ("1", "Download (paste any link)"),
     ("2", "Download many links (queue)"),
-    ("3", "Resume unfinished downloads"),
-    ("4", "History"),
-    ("5", "Settings"),
-    ("6", "Tools"),
+    ("3", "Watch the clipboard for links"),
+    ("4", "Resume unfinished downloads"),
+    ("5", "History"),
+    ("6", "Settings"),
+    ("7", "Tools"),
     ("0", "Exit"),
 ]
 
@@ -891,6 +1066,7 @@ def main():
     cfg = Config.load(CONFIG_PATH)
     log.setup(LOG_PATH)
     log.info("app started, base folder %s", cfg.base_dir)
+    log.info("proxy: %s", http_engine.configure_proxy(cfg.proxy))
     if not ensure_ytdlp():
         return
 
@@ -920,14 +1096,17 @@ def main():
             download_queue(cfg, toolbox, history)
             pause()
         elif choice == "3":
-            resume_unfinished(cfg, toolbox, history)
+            watch_clipboard(cfg, toolbox, history)
             pause()
         elif choice == "4":
-            show_history(history)
+            resume_unfinished(cfg, toolbox, history)
             pause()
         elif choice == "5":
-            settings_screen(cfg, toolbox)
+            show_history(history)
+            pause()
         elif choice == "6":
+            settings_screen(cfg, toolbox)
+        elif choice == "7":
             tools_screen(cfg, toolbox)
         elif choice == "0":
             print("Bye!")

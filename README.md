@@ -22,10 +22,11 @@ Cookies from : off
 
   1. Download (paste any link)
   2. Download many links (queue)
-  3. Resume unfinished downloads
-  4. History
-  5. Settings
-  6. Tools
+  3. Watch the clipboard for links
+  4. Resume unfinished downloads
+  5. History
+  6. Settings
+  7. Tools
   0. Exit
 ```
 
@@ -56,6 +57,9 @@ Cookies from : off
   warning for programs on plain `http`, and a clear message when a link
   really needs a login.
 - **A log file**, with tokens and passwords removed from links.
+- **Clipboard watch.** Copy a link and the tool offers to download it.
+- **Proxy, extra headers, and logins** for links that need them.
+- **A folder for each type**, even on another drive.
 - **Asks before playlists**, so one link does not pull 200 videos.
 - **Works without ffmpeg**, with a lower-quality fallback.
 
@@ -144,7 +148,7 @@ Before anything is saved, a direct file shows you what was found:
 ```
 
 While a download runs, the file is written as `name.part`. If you press
-`Ctrl+C`, or the connection dies, that part is kept. Use option **3**,
+`Ctrl+C`, or the connection dies, that part is kept. Use option **4**,
 **Resume unfinished downloads**, to continue it later.
 
 ## Downloading many links at once
@@ -219,6 +223,57 @@ The tool always reads the mode before it continues a file, so a part is
 never continued by the wrong method. If it cannot be continued safely, the
 download starts again instead of making a damaged file.
 
+## Watching the clipboard
+
+Choose option **3**. Every time you copy a link, the tool offers it:
+
+```
+New link: https://example.com/tool.zip
+Download it? [Y/n/q]:
+```
+
+Press Enter to download it, `n` to ignore it, or `q` to stop watching.
+`Ctrl+C` also stops. Only plain `http` and `https` links are offered, so
+copying ordinary text does nothing.
+
+On Windows and macOS this works out of the box. On Linux it needs `xclip`,
+`xsel`, or `wl-clipboard`.
+
+## Links that need a login, a header, or a proxy
+
+**A login in the link.** Write it as `https://user:password@host/file.zip`.
+The tool takes the login out of the address and sends it in an
+`Authorization` header, which is where it belongs. The log never shows it.
+
+**Extra headers.** Some sites only answer when a header is present, most
+often `Referer`. **Settings → Extra headers** lets you add, change, and
+delete them. They are sent with every direct download.
+
+**Proxy.** **Settings → Proxy** takes three kinds of answer:
+
+| You type | What happens |
+|---|---|
+| *(blank)* | follow the computer's own proxy settings (the default) |
+| `none` | never use a proxy |
+| `http://10.0.0.1:3128` | send everything through that proxy |
+
+Addresses on your own computer always skip the proxy, because no proxy can
+reach them.
+
+## When a download finishes
+
+**Settings → After a download finishes** can open the folder with the file
+selected, make a sound, do both, or do nothing (the default).
+
+## A folder for each type
+
+**Settings → Folder for each type** changes where any one type goes.
+
+- A plain name such as `Films` goes inside the base folder.
+- A full path such as `E:/Programs` is used exactly as written, so one type
+  can live on a different drive.
+- Type `-` to go back to the default.
+
 ## Checks that protect you
 
 **Checksum.** Before a download starts you can paste the checksum the site
@@ -268,7 +323,7 @@ link becomes `***`, so the log is safe to share when you ask for help.
 
 ## History
 
-Option **4** shows the last 20 downloads: name, time, size, folder, and any
+Option **5** shows the last 20 downloads: name, time, size, folder, and any
 error. Links that were downloaded before are skipped automatically, as long
 as the file is still on the disk. The history is stored in `history.json`
 next to the app, and you can clear it from the same screen.
@@ -330,7 +385,10 @@ Two more files are made next to it while you use the tool: `history.json` and
   "connections": 8,
   "speed_limit_kb": 0,
   "use_aria2c": true,
-  "history_limit": 500
+  "history_limit": 500,
+  "proxy": "",
+  "headers": {},
+  "after_download": "nothing"
 }
 ```
 
@@ -345,6 +403,8 @@ fdl/
   app.py            the menu
   router.py         decides which engine a link needs
   safety.py         free space, plain http, and login page checks
+  clipboard.py      reads the clipboard on each system
+  postaction.py     open the folder, or make a sound
   checksum.py       reads and compares checksums
   log.py            the log file, with links cleaned
   batch.py          the queue: check links, download many at once
@@ -372,9 +432,10 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 196 tests cover file naming, categories, settings, history, the
-queue, link routing, safety checks, checksums, the log, the speed limit,
-multi-connection downloads, and real resume —
+needed. 237 tests cover file naming, categories, settings, history, the
+queue, link routing, safety checks, checksums, the log, the clipboard, the
+proxy, logins in links, the speed limit, multi-connection downloads, and real
+resume —
 including a server that cuts the connection in the middle, and the check that
 a split part file is never continued the wrong way.
 
@@ -386,11 +447,13 @@ a split part file is never continued the wrong way.
 | "yt-dlp is NOT installed" | Say yes to the install question, or run the command it prints. |
 | Download fails on YouTube | Update yt-dlp (Tools), then set a cookies browser (Settings). |
 | "Cannot use the folder" | The drive or path does not exist. Change it in Settings. |
-| A download keeps stopping | Run it again, or use option 3. It continues from the last byte. |
+| A download keeps stopping | Run it again, or use option 4. It continues from the last byte. |
 | Link needs a login (401/403) | The tool cannot download it without your cookies or a token. |
 | "The server sent a web page, not the file" | The link needs a login, or it has moved. Open it in a browser first. |
 | "Not enough free space" | Free some space, or change the base folder in Settings. |
 | Something went wrong and you want details | Tools -> Show the last lines of the log. |
+| The clipboard watch says it cannot read | On Linux, install xclip, xsel, or wl-clipboard. |
+| A site refuses the download but works in a browser | Add a `Referer` header in Settings -> Extra headers. |
 
 ## Roadmap
 

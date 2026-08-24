@@ -24,6 +24,7 @@ The mode is always read from the meta file before resuming, so a part file
 is never continued by the wrong method.
 """
 
+import base64
 import http.client
 import json
 import socket
@@ -70,8 +71,38 @@ class RemoteInfo:
     content_type: str = None
 
 
+def split_login(url):
+    """Take `user:password@` out of a link.
+
+    Returns (clean_url, header_value_or_None). A link written as
+    `https://user:pass@host/file.zip` is a normal way to pass a login, but
+    the parts must travel in an `Authorization` header, not in the address.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return url, None
+    if "@" not in parts.netloc:
+        return url, None
+
+    login, _, host = parts.netloc.rpartition("@")
+    if not login:
+        return url, None
+
+    user, _, password = login.partition(":")
+    user = urllib.parse.unquote(user)
+    password = urllib.parse.unquote(password)
+    token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode()
+    clean = urllib.parse.urlunsplit(
+        (parts.scheme, host, parts.path, parts.query, parts.fragment))
+    return clean, "Basic " + token
+
+
 def _request(url, extra_headers=None):
     headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
+    url, authorization = split_login(url)
+    if authorization:
+        headers["Authorization"] = authorization
     if extra_headers:
         headers.update(extra_headers)
     return urllib.request.Request(url, headers=headers)
@@ -85,12 +116,33 @@ _forced_opener = None
 
 
 def set_opener(opener):
-    """Use one opener for every request, or None to go back to the default.
-
-    This is the place where proxy settings will be applied later.
-    """
+    """Use one opener for every request, or None to go back to the default."""
     global _forced_opener
     _forced_opener = opener
+
+
+PROXY_SYSTEM = ""        # follow the computer's own proxy settings
+PROXY_NONE = "none"      # never use a proxy
+
+
+def configure_proxy(setting):
+    """Apply a proxy setting. Returns a short line describing what was set.
+
+    `""` follows the system settings, `"none"` turns the proxy off, and an
+    address such as `http://host:3128` is used for http and https.
+    """
+    setting = (setting or "").strip()
+    if not setting:
+        set_opener(None)
+        return "the computer's own proxy settings"
+    if setting.lower() in (PROXY_NONE, "off", "direct"):
+        set_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
+        return "no proxy"
+
+    address = setting if "://" in setting else "http://" + setting
+    handler = urllib.request.ProxyHandler({"http": address, "https": address})
+    set_opener(urllib.request.build_opener(handler))
+    return address
 
 
 def _is_local(host):
@@ -99,10 +151,10 @@ def _is_local(host):
 
 
 def _urlopen(request, timeout):
-    if _forced_opener is not None:
-        return _forced_opener.open(request, timeout=timeout)
     if _is_local(urllib.parse.urlsplit(request.full_url).hostname):
         return _no_proxy_opener.open(request, timeout=timeout)
+    if _forced_opener is not None:
+        return _forced_opener.open(request, timeout=timeout)
     return urllib.request.urlopen(request, timeout=timeout)
 
 

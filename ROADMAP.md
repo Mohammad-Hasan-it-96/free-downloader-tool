@@ -103,13 +103,16 @@ This is the main request.
 - ✅ Clear message when a link needs a login, instead of saving the HTML
   error page as if it were the file.
 
-## Phase 6 — Convenience
+## Phase 6 — Convenience ✅
 
-- ⬜ **Clipboard watch** (optional): when you copy a link, the tool offers to
+- ✅ **Clipboard watch** (optional): when you copy a link, the tool offers to
   download it.
-- ⬜ **Custom headers, cookies, basic auth, and proxy** for protected links.
-- ⬜ **After download**: open the folder, or play a sound.
-- ⬜ Per-category custom folders (for example, send `Programs` to another drive).
+- ✅ **Custom headers, cookies, basic auth, and proxy** for protected links.
+  A login written into a link (`https://user:pass@host/file`) is turned into
+  an `Authorization` header, so it never travels in the address.
+- ✅ **After download**: open the folder, or play a sound.
+- ✅ Per-category custom folders. A plain name goes inside the base folder;
+  a full path such as `E:/Programs` is used exactly as written.
 
 ## Phase 7 — Packaging and quality
 
@@ -143,4 +146,5 @@ These are useful, but they are not needed for a good tool. They go last.
 3. ✅ Phase 3 — speed.
 4. ✅ Phase 2 — one smart "Download" option.
 5. ✅ Phase 5 — trust and safety.
-6. 🔨 Phase 6 and 7 — convenience and packaging.
+6. ✅ Phase 6 — convenience.
+7. 🔨 Phase 7 — packaging and quality.
