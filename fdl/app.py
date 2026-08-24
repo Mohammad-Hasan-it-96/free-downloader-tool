@@ -6,7 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import aria2_engine, batch, http_engine, router, ytdlp_engine
+from . import (aria2_engine, batch, checksum, http_engine, log, router,
+               safety, ytdlp_engine)
 from .batch import KIND_FILE, KIND_MEDIA
 from .categories import CATEGORY_ORDER, category_for
 from .config import BROWSERS, Config
@@ -23,6 +24,7 @@ from .tools import Toolbox, ytdlp_installed
 APP_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = APP_DIR / "config.json"
 HISTORY_PATH = APP_DIR / "history.json"
+LOG_PATH = APP_DIR / "fdl.log"
 TITLE = "FREE DOWNLOADER TOOL"
 
 
@@ -164,20 +166,97 @@ def download_file(cfg, toolbox, history, url, info=None, ask_first=True):
     print(f"  Speed    : {cyan(_speed_plan(cfg, toolbox, info))}")
 
     part_path = dest_dir / (info.filename + ".part")
+    already = 0
     if part_path.exists():
-        have = part_path.stat().st_size
-        print(f"  Found    : {yellow(human_size(have) + ' already downloaded')}")
+        meta = http_engine.read_meta(part_path)
+        if http_engine.meta_matches(meta, url, info):
+            already = http_engine.part_progress(part_path, meta)
+            print(f"  Found    : "
+                  f"{yellow(human_size(already) + ' already downloaded')}")
 
     earlier = history.already_have(url)
     if earlier:
         print(yellow(f"  Note     : you downloaded this before, to "
                      f"{earlier['path']}"))
 
+    if not _passes_safety_checks(cfg, url, info, category, dest_dir, already):
+        return None
+
     if ask_first and not ask_yes_no("\nStart the download?", default_no=False):
         print(red("Cancelled."))
         return None
 
-    return _run_file_download(cfg, toolbox, history, url, dest_dir, info)
+    expected_sum = ask_checksum()
+    saved = _run_file_download(cfg, toolbox, history, url, dest_dir, info)
+    if saved and expected_sum:
+        check_saved_file(saved, expected_sum)
+    return saved
+
+
+def _passes_safety_checks(cfg, url, info, category, dest_dir, already=0):
+    """Warn about space, plain http, and login pages. False = stop."""
+    needed = (info.size or 0) - already
+    enough, message = safety.check_space(dest_dir, needed)
+    if not enough:
+        print(red(f"\n{message}"))
+        log.warning("not enough space for %s", log.redact(url))
+        if not ask_yes_no("Try anyway?", default_no=True):
+            return False
+
+    if safety.looks_like_a_login_page(info):
+        print(yellow(f"\n{safety.login_page_message(info)}"))
+        print(yellow("Saving it would give you a web page with the wrong "
+                     "name."))
+        log.warning("server sent a page, not a file: %s", log.redact(url))
+        if not ask_yes_no("Download it anyway?", default_no=True):
+            return False
+
+    if safety.is_insecure_program(url, category):
+        print(red("\nThis is a program, and the link is plain http, not "
+                  "https."))
+        print(yellow("Nothing protects the file on the way, so somebody "
+                     "between you and the server could change it. Only "
+                     "continue if you trust this network and this site."))
+        log.warning("program over plain http: %s", log.redact(url))
+        if not ask_yes_no("Download it anyway?", default_no=True):
+            return False
+    return True
+
+
+def ask_checksum():
+    """Ask for a checksum to compare after the download. May be empty."""
+    print(grey("\nIf the site published a checksum, paste it to have the "
+               "file checked."))
+    return input(bold("Checksum (blank to skip): ")).strip()
+
+
+def check_saved_file(path, pasted_text):
+    """Work out the checksum of the saved file and compare it."""
+    print(yellow(f"\nChecking the file ({human_size(path.stat().st_size)})..."))
+    result = checksum.verify(path, pasted_text)
+
+    if result.error:
+        print(red(f"Could not check it: {result.error}"))
+        return False
+    if result.ok:
+        print(green(f"[OK] The {result.algorithm} checksum matches. "
+                    "The file is exactly what the site published."))
+        log.info("checksum ok (%s) for %s", result.algorithm, path.name)
+        return True
+
+    print(red(f"[WARNING] The {result.algorithm} checksum does NOT match."))
+    print(f"  expected: {grey(result.expected)}")
+    print(f"  actual  : {red(result.actual)}")
+    print(yellow("The file is damaged, or it is not the file the site "
+                 "published. Do not run or open it."))
+    log.error("checksum MISMATCH (%s) for %s", result.algorithm, path.name)
+    if ask_yes_no("Delete this file?", default_no=False):
+        try:
+            path.unlink()
+            print(green("Deleted."))
+        except OSError as err:
+            print(red(f"Could not delete it: {err}"))
+    return False
 
 
 def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
@@ -193,6 +272,8 @@ def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
         bar.update(done)
 
     def on_retry(attempt, total_attempts, reason, wait):
+        log.warning("retry %s/%s for %s (%s)", attempt, total_attempts,
+                    log.redact(url), reason)
         bar.fail(yellow(f"  Connection problem ({reason}). "
                         f"Retry {attempt}/{total_attempts} in {wait}s..."))
 
@@ -228,6 +309,7 @@ def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
     if not use_aria2:
         bar.finish()
     print(green(f"[DONE] Saved to {saved}"))
+    log.info("done: %s -> %s", log.redact(url), saved)
     history.add(url, STATUS_DONE, path=saved, size=info.size,
                 category=category)
     return saved
@@ -289,6 +371,8 @@ def show_plan(items):
             resume = yellow(f"  (resume from {human_size(item.resume_from)})")
         print(f"  {index}. {item.name}{resume}")
         print(f"      {grey(f'{human_size(item.size)} -> {item.dest}')}")
+        for note in item.warnings:
+            print(f"      {yellow('warning: ' + note)}")
     if total_size:
         print(bold(f"\n  Total to download: about {human_size(total_size)}"))
 
@@ -316,6 +400,13 @@ def download_queue(cfg, toolbox, history):
     if not ready and not media:
         print(yellow("\nThere is nothing to download."))
         return
+
+    enough, message = batch.check_space_for(items, cfg)
+    if not enough:
+        print(red(f"\n{message}"))
+        log.warning("not enough space for the queue")
+        if not ask_yes_no("Try anyway?", default_no=True):
+            return
 
     print(grey(f"\n{len(ready)} file(s) will download "
                f"{cfg.max_parallel} at a time."))
@@ -687,8 +778,42 @@ TOOLS_MENU = [
     ("1", "Show available formats for a URL"),
     ("2", "Update yt-dlp"),
     ("3", "Look for ffmpeg / deno / aria2c again"),
+    ("4", "Check a file against a checksum"),
+    ("5", "Show the last lines of the log"),
     ("0", "Back"),
 ]
+
+
+def check_a_file():
+    """Compare any file on the disk against a checksum you paste."""
+    raw = input(bold("\nPath of the file: ")).strip().strip('"')
+    if not raw:
+        return
+    path = Path(raw).expanduser()
+    if not path.is_file():
+        print(red(f"There is no file at {path}"))
+        return
+    pasted = input(bold("Checksum: ")).strip()
+    if not pasted:
+        print(red("No checksum given."))
+        return
+    check_saved_file(path, pasted)
+
+
+def show_log():
+    lines = log.tail(LOG_PATH, 30)
+    if not lines:
+        print(yellow(f"\nThe log is empty, or it cannot be read."))
+        print(grey(f"It would be at: {LOG_PATH}"))
+        return
+    print(bold(f"\nLast {len(lines)} lines of {LOG_PATH}\n"))
+    for line in lines:
+        colour = grey
+        if " ERROR " in line:
+            colour = red
+        elif " WARNING " in line:
+            colour = yellow
+        print("  " + colour(line))
 
 
 def tools_screen(cfg, toolbox):
@@ -711,6 +836,12 @@ def tools_screen(cfg, toolbox):
         elif choice == "3":
             toolbox.refresh()
             print(green("\nSearched again."))
+            pause()
+        elif choice == "4":
+            check_a_file()
+            pause()
+        elif choice == "5":
+            show_log()
             pause()
         elif choice == "0":
             return
@@ -758,6 +889,8 @@ MENU = [
 def main():
     enable_colors()
     cfg = Config.load(CONFIG_PATH)
+    log.setup(LOG_PATH)
+    log.info("app started, base folder %s", cfg.base_dir)
     if not ensure_ytdlp():
         return
 

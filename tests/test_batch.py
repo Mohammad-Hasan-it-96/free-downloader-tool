@@ -315,3 +315,54 @@ def test_queue_keeps_a_real_file_even_when_the_name_has_no_extension(
 def test_classify_prefers_a_file_extension_over_a_media_site():
     url = "https://archive.org/download/item/tool.zip"
     assert batch.classify(url) == KIND_FILE
+
+
+# --------------------------- safety in the queue ------------------------ #
+
+def test_queue_plan_warns_about_a_program_over_plain_http(cfg, monkeypatch):
+    from fdl import http_engine
+    from fdl.http_engine import RemoteInfo
+
+    def fake_probe(url, *args, **kwargs):
+        return RemoteInfo(url=url, size=5000, resumable=True,
+                          filename="setup.exe",
+                          content_type="application/octet-stream")
+
+    monkeypatch.setattr(http_engine, "probe", fake_probe)
+    items = batch.prepare(["http://insecure.example.com/setup.exe"], cfg)
+    assert items[0].category == "Programs"
+    assert any("plain http" in note for note in items[0].warnings)
+
+
+def test_queue_plan_has_no_warning_for_https(cfg, monkeypatch):
+    from fdl import http_engine
+    from fdl.http_engine import RemoteInfo
+
+    def fake_probe(url, *args, **kwargs):
+        return RemoteInfo(url=url, size=5000, resumable=True,
+                          filename="setup.exe",
+                          content_type="application/octet-stream")
+
+    monkeypatch.setattr(http_engine, "probe", fake_probe)
+    items = batch.prepare(["https://secure.example.com/setup.exe"], cfg)
+    assert items[0].warnings == []
+
+
+def test_total_needed_leaves_out_skipped_and_resumed_bytes(server, cfg,
+                                                           tmp_path):
+    from fdl.history import History
+    kept = tmp_path / "song.mp3"
+    kept.write_text("old")
+    history = History(tmp_path / "history.json")
+    history.add(f"{server}/song.mp3", STATUS_DONE, path=kept)
+
+    items = batch.prepare([f"{server}/song.mp3", f"{server}/book.pdf"], cfg,
+                          history)
+    # song.mp3 is skipped, so only book.pdf (10 000 bytes) is counted.
+    assert batch.total_needed(items) == 10_000
+
+
+def test_space_check_for_the_whole_queue(server, cfg):
+    items = batch.prepare([f"{server}/movie.mp4"], cfg)
+    ok, message = batch.check_space_for(items, cfg)
+    assert ok and message == ""

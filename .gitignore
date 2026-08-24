@@ -225,3 +225,7 @@ config.json
 
 # Download history, created at runtime
 history.json
+
+# Log file, created at runtime
+fdl.log
+fdl.log.*

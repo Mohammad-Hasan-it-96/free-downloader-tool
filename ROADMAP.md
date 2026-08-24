@@ -90,14 +90,17 @@ This is the main request.
 - ✅ **Duplicate check**: warn if this URL, or a file with the same name and
   size, is already downloaded.
 
-## Phase 5 — Trust and safety
+## Phase 5 — Trust and safety ✅
 
-- ⬜ **Checksum check** (SHA-256 / MD5) after download, when you paste one.
-- ⬜ **Free space check** before starting, so you do not fill the disk.
-- ⬜ **Log file** for troubleshooting.
-- ⬜ Warn when a program file (`.exe`, `.msi`) comes from a plain `http://`
+- ✅ **Checksum check** after download, when you paste one. MD5, SHA-1,
+  SHA-256, and SHA-512 are recognised by the length of the value. Any file on
+  the disk can also be checked from the Tools menu.
+- ✅ **Free space check** before starting, so you do not fill the disk.
+- ✅ **Log file** for troubleshooting, with links cleaned of tokens and
+  passwords before they are written.
+- ✅ Warn when a program file (`.exe`, `.msi`) comes from a plain `http://`
   link, because it can be changed on the way.
-- ⬜ Clear message when a link needs a login, instead of saving the HTML
+- ✅ Clear message when a link needs a login, instead of saving the HTML
   error page as if it were the file.
 
 ## Phase 6 — Convenience
@@ -139,4 +142,5 @@ These are useful, but they are not needed for a good tool. They go last.
 2. ✅ Phase 4 — queue and history.
 3. ✅ Phase 3 — speed.
 4. ✅ Phase 2 — one smart "Download" option.
-5. 🔨 Phase 5, 6, 7 — polish, safety, and packaging.
+5. ✅ Phase 5 — trust and safety.
+6. 🔨 Phase 6 and 7 — convenience and packaging.

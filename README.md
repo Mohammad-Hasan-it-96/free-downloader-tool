@@ -52,6 +52,10 @@ Cookies from : off
   marked "skip" instead of downloading twice.
 - **One Download option.** Paste any link. The tool picks the right engine,
   says why, and lets you change it. If one engine fails, it offers the other.
+- **Checks that protect you**: a checksum check, a free space check, a
+  warning for programs on plain `http`, and a clear message when a link
+  really needs a login.
+- **A log file**, with tokens and passwords removed from links.
 - **Asks before playlists**, so one link does not pull 200 videos.
 - **Works without ffmpeg**, with a lower-quality fallback.
 
@@ -215,6 +219,53 @@ The tool always reads the mode before it continues a file, so a part is
 never continued by the wrong method. If it cannot be continued safely, the
 download starts again instead of making a damaged file.
 
+## Checks that protect you
+
+**Checksum.** Before a download starts you can paste the checksum the site
+published. When the file is saved, the tool works out the real value and
+compares them:
+
+```
+[OK] The sha256 checksum matches. The file is exactly what the site published.
+```
+
+If it does not match, the tool says so plainly and offers to delete the file:
+
+```
+[WARNING] The sha256 checksum does NOT match.
+  expected: fd611b728e7fda802b450bbdbe84ef6e625e2a0b4df4dae2eff07e5442fdcc53
+  actual  : 9c121e619bfe02eaba582d7080eea46fd53ec0b50717e6794a948fada4ae8f3c
+The file is damaged, or it is not the file the site published.
+```
+
+MD5, SHA-1, SHA-256, and SHA-512 are recognised by the length of the value.
+Forms like `sha256:abc...`, `SHA-256 = abc...`, and `abc...  program.zip` all
+work. **Tools → Check a file against a checksum** does the same for any file
+already on your disk.
+
+**Free space.** The tool checks the drive before it starts, and keeps 50 MB
+free, so a big download cannot fill the disk completely. The queue checks the
+total of all its files at once.
+
+**Programs over plain `http://`.** A `.exe` or `.msi` on a plain `http` link
+is not protected on the way, so somebody on the same network could change it.
+The tool warns and asks before downloading. The default answer is **No**.
+
+**Login pages.** If you ask for `tool.zip` and the server answers with a web
+page, the tool tells you instead of saving that page under the name
+`tool.zip`. This usually means the link needs a login, or it has moved.
+
+## The log file
+
+Everything important is written to `fdl.log`, next to the app: downloads that
+finished, downloads that failed, retries, checksum results, and warnings.
+The file is rotated at 1 MB, so it cannot grow without end.
+
+**Tools → Show the last lines of the log** reads it inside the app.
+
+Links are cleaned before they are written. A token, a key, or a password in a
+link becomes `***`, so the log is safe to share when you ask for help.
+
 ## History
 
 Option **4** shows the last 20 downloads: name, time, size, folder, and any
@@ -264,6 +315,8 @@ python -m yt_dlp --cookies cookies.txt -f best <URL>
 ## Settings
 
 Settings live in `config.json`, next to the app. It is created on first run.
+Two more files are made next to it while you use the tool: `history.json` and
+`fdl.log`.
 
 ```json
 {
@@ -291,6 +344,9 @@ automatically, and you are told once what changed.
 fdl/
   app.py            the menu
   router.py         decides which engine a link needs
+  safety.py         free space, plain http, and login page checks
+  checksum.py       reads and compares checksums
+  log.py            the log file, with links cleaned
   batch.py          the queue: check links, download many at once
   history.py        the record of what was downloaded
   multiprogress.py  one progress line per download
@@ -316,9 +372,9 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 152 tests cover file naming, categories, settings, history, the
-queue, link routing, the speed limit, multi-connection downloads, and real
-resume —
+needed. 196 tests cover file naming, categories, settings, history, the
+queue, link routing, safety checks, checksums, the log, the speed limit,
+multi-connection downloads, and real resume —
 including a server that cuts the connection in the middle, and the check that
 a split part file is never continued the wrong way.
 
@@ -332,6 +388,9 @@ a split part file is never continued the wrong way.
 | "Cannot use the folder" | The drive or path does not exist. Change it in Settings. |
 | A download keeps stopping | Run it again, or use option 3. It continues from the last byte. |
 | Link needs a login (401/403) | The tool cannot download it without your cookies or a token. |
+| "The server sent a web page, not the file" | The link needs a login, or it has moved. Open it in a browser first. |
+| "Not enough free space" | Free some space, or change the base folder in Settings. |
+| Something went wrong and you want details | Tools -> Show the last lines of the log. |
 
 ## Roadmap
 

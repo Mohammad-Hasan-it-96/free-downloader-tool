@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import http_engine, router, ytdlp_engine
+from . import http_engine, log, router, safety, ytdlp_engine
 from .categories import category_for
 from .history import STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED
 from .http_engine import DownloadError
@@ -28,6 +28,7 @@ class Item:
     error: str = ""
     note: str = ""
     resume_from: int = 0
+    warnings: list = field(default_factory=list)
 
     @property
     def label(self):
@@ -130,6 +131,7 @@ def _prepare_one(item, cfg, history):
     item.name = item.info.filename
     item.category = category_for(item.info.filename, item.info.content_type)
     item.dest = cfg.folder_for(item.category)
+    item.warnings = _warnings_for(item)
 
     part = Path(item.dest) / (item.name + ".part")
     if part.exists():
@@ -143,6 +145,30 @@ def _prepare_one(item, cfg, history):
             item.status = STATUS_SKIPPED
             item.note = f"already downloaded to {earlier['path']}"
     return item
+
+
+def _warnings_for(item):
+    """Short notes to show in the plan, before anything is downloaded."""
+    notes = []
+    if safety.looks_like_a_login_page(item.info):
+        notes.append("the server sent a web page, not a file")
+    if safety.is_insecure_program(item.url, item.category):
+        notes.append("a program over plain http, which is not protected")
+    return notes
+
+
+def total_needed(items):
+    """How many bytes the whole queue still has to download."""
+    total = 0
+    for item in items:
+        if item.kind == KIND_FILE and item.status == STATUS_PENDING:
+            total += max(0, (item.size or 0) - item.resume_from)
+    return total
+
+
+def check_space_for(items, cfg):
+    """One space check for the whole queue. Returns (ok, message)."""
+    return safety.check_space(cfg.base_dir, total_needed(items))
 
 
 def run_files(items, cfg, progress=None, workers=3, history=None):
@@ -212,6 +238,11 @@ def _download_one(index, item, cfg, progress, history, stop):
         item.path = saved
         if progress:
             progress.finish(index, STATUS_DONE)
+
+    if item.status == STATUS_DONE:
+        log.info("queue done: %s -> %s", log.redact(item.url), item.path)
+    else:
+        log.error("queue failed: %s (%s)", log.redact(item.url), item.error)
 
     if history:
         history.add(item.url, item.status, path=item.path, size=item.size,
