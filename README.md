@@ -1,53 +1,85 @@
 # Free Downloader Tool
 
-A simple terminal app that downloads videos and audio, powered by
-[yt-dlp](https://github.com/yt-dlp/yt-dlp).
+A download manager for the terminal.
 
-It works with YouTube and 1000+ other sites. You pick the quality, and the file
-is saved to any folder you choose (default: `D:\Videos`, so your C: drive stays
-free).
+It does two jobs:
+
+1. **Media sites** — YouTube and 1000+ other sites, through
+   [yt-dlp](https://github.com/yt-dlp/yt-dlp). You pick the quality.
+2. **Direct links** — any `.exe`, `.zip`, `.pdf`, `.iso`, and so on, with
+   **automatic resume** if the connection breaks.
+
+Every file is sorted into a folder by its type, so your downloads stay tidy.
 
 ```
-====================================================
-          VIDEO DOWNLOADER  (yt-dlp)
-====================================================
-Save folder  : D:\Videos
-ffmpeg       : C:\...\ffmpeg-9.0-full_build\bin
+========================================================
+          FREE DOWNLOADER TOOL
+========================================================
+Base folder  : D:\Downloads
+Sort by type : on
+ffmpeg       : ready
 deno (JS)    : ready
+aria2c       : not installed
 Cookies from : off
 
-  1. Download a video / audio
-  2. Change download folder
-  3. Set browser for cookies (fix 'not a bot')
-  4. Show available formats for a URL
-  5. Update yt-dlp
+  1. Download video / audio from a site (yt-dlp)
+  2. Download a file from a direct link
+  3. Resume unfinished downloads
+  4. Change base folder
+  5. Turn sorting by file type on / off
+  6. Set browser for cookies (fix 'not a bot')
+  7. Show available formats for a URL
+  8. Update yt-dlp
   0. Exit
 ```
 
-## Features
+## Main features
 
-- Pick the quality: best, 1080p, 720p, 480p, 360p, MP3 audio, or an exact
-  format code.
-- Asks before downloading a whole playlist, so one link does not pull 200 files.
-- Finds `ffmpeg` and `deno` by itself. You do not set any paths.
-- Still works without `ffmpeg`, by falling back to the best single file.
-- Uses browser cookies to pass YouTube's "not a bot" check.
-- Remembers your settings in `config.json`.
+- **Resume that is safe.** A stopped download continues from the exact byte.
+  The tool also checks the server's `ETag` first, so if the file changed, it
+  starts again instead of making a broken mix of old and new bytes.
+- **Retry on network errors.** Each retry waits a little longer, and continues
+  from where it stopped.
+- **Sorting by file type.** See the table below. You can turn this off.
+- **Good file names.** The name comes from the server header first, then from
+  the URL. Illegal characters are removed, and an existing file is never
+  overwritten by accident.
+- **Live progress**: percent, size, speed, and time left.
+- **Asks before playlists**, so one link does not pull 200 videos.
+- **Works without ffmpeg**, with a lower-quality fallback.
+
+## Where files are saved
+
+The base folder is yours to choose. Inside it:
+
+| Folder | Examples |
+|---|---|
+| `Videos` | mp4, mkv, avi, mov, webm |
+| `Audio` | mp3, m4a, flac, wav, opus |
+| `Programs` | exe, msi, apk, deb, dmg, AppImage |
+| `Archives` | zip, rar, 7z, tar.gz, iso |
+| `Documents` | pdf, docx, xlsx, epub, txt |
+| `Images` | jpg, png, gif, webp, svg |
+| `Code` | py, js, json, sql, whl, jar |
+| `Other` | everything else |
+
+The extension decides the folder. The MIME type from the server is used only
+when the file has no useful extension.
 
 ## Requirements
 
 | Tool | Needed for | Install |
 |---|---|---|
 | Python 3.9+ | the app itself | [python.org](https://www.python.org/downloads/) |
-| yt-dlp | downloading | `pip install -U yt-dlp` |
+| yt-dlp | media sites | `pip install -U yt-dlp` |
 | ffmpeg | merging HD video + audio, and MP3 | `winget install Gyan.FFmpeg` |
 | deno | JavaScript that yt-dlp needs for YouTube | `winget install DenoLand.Deno` |
 
-Only Python and yt-dlp are required. Without `ffmpeg` the app still runs, but
-quality is lower and MP3 conversion is off. Without `deno`, some YouTube
-downloads may fail.
+Direct file links need **only Python** — no extra install. If yt-dlp is
+missing, the app tells you at startup and offers to install it.
 
-If yt-dlp is missing, the app tells you at startup and offers to install it.
+`aria2c` is shown in the header but is not used yet. It is planned for faster
+downloads — see the [roadmap](ROADMAP.md).
 
 ## How to run
 
@@ -56,66 +88,59 @@ On Windows, double-click **`Download Video.bat`**.
 Or from a terminal:
 
 ```bash
+python -m fdl
+# or
 python video_downloader.py
 ```
 
-## Menu options
+## Downloading a direct link
 
-| Option | What it does |
-|---|---|
-| 1 | Download a video or audio. Paste the URL, then pick the quality. |
-| 2 | Change the download folder. The path is checked before it is saved. |
-| 3 | Choose the browser to read cookies from. Fixes the "not a bot" error. |
-| 4 | Show every available format for a URL, with its format code. |
-| 5 | Update yt-dlp with pip. Do this often — sites change. |
-| 0 | Exit. |
+Choose option **2** and paste the link. Before anything is saved, the tool
+shows you what it found:
 
-## Quality choices
+```
+  Name     : python-3.12.0-embed-amd64.zip
+  Size     : 10.5 MB
+  Type     : Archives
+  Save to  : D:\Downloads\Archives
+  Resume   : supported
+```
 
-| Choice | Result |
-|---|---|
-| Best | Highest video + highest audio, merged into MP4. |
-| 1080p / 720p / 480p / 360p | Best file at that height or lower. |
-| Audio only (MP3) | Extracts audio and converts it to MP3, best quality. |
-| Pick a format code | Shows the format list, then you type a code, for example `137+140`. |
+While a download runs, the file is written as `name.part`. If you press
+`Ctrl+C`, or the connection dies, that part is kept. Use option **3**,
+**Resume unfinished downloads**, to continue it later.
 
 ## Playlists
 
-If the link contains `list=` (for example
-`youtube.com/watch?v=ABC&list=PL123`), the app asks:
+If the link contains `list=`, the app asks:
 
 ```
 This link belongs to a playlist.
 Download the WHOLE playlist? [y/N]:
 ```
 
-The default answer is **No**, so you get only the one video. Press `y` if you
-really want every video in the playlist.
+The default answer is **No**, so you get only the one video.
 
 ## If ffmpeg is not installed
 
 The app does not fail. It changes what it does:
 
 - **Normal quality choices** — downloads the best single file that already
-  contains video and audio. Quality may be lower than the true maximum.
-- **MP3** — cannot convert. It offers to save the raw audio instead (`.m4a` or
-  `.webm`).
-- **Format codes** — a code like `137+140` cannot be merged. Pick one single
-  code that already has video and audio.
+  has video and audio. Quality may be lower than the true maximum.
+- **MP3** — cannot convert. It offers to save the raw audio instead.
+- **Format codes** — a code like `137+140` cannot be merged. Pick one code
+  that already has video and audio.
 
 ## Fixing YouTube "Sign in to confirm you're not a bot"
 
-YouTube sometimes blocks anonymous downloads. Use your browser cookies:
-
-1. In the app, choose menu option **3**, and select the browser where you are
-   logged into YouTube (for example `edge` or `chrome`).
-2. **Fully close that browser.** While it runs, the cookie file is locked and
-   cannot be read.
+1. Choose menu option **6**, and select the browser where you are logged into
+   YouTube.
+2. **Fully close that browser.** While it runs, the cookie file is locked.
 3. Download again.
 
-Some Chrome and Edge versions encrypt their cookies and still refuse. In that
-case, export a `cookies.txt` file with a browser extension such as
-"Get cookies.txt LOCALLY", then run:
+Some Chrome and Edge versions encrypt their cookies and still refuse. Then
+export a `cookies.txt` file with an extension such as "Get cookies.txt
+LOCALLY", and run:
 
 ```bash
 python -m yt_dlp --cookies cookies.txt -f best <URL>
@@ -124,33 +149,68 @@ python -m yt_dlp --cookies cookies.txt -f best <URL>
 > **Note:** cookies identify your logged-in account to the site. Leave this
 > setting off unless you need it.
 
-## Settings file
+## Settings
 
-Settings are stored next to the script in `config.json`:
+Settings live in `config.json`, next to the app. It is created on first run.
 
 ```json
 {
-  "download_dir": "D:\\Videos",
-  "cookies_browser": ""
+  "version": 2,
+  "base_dir": "D:\\Downloads",
+  "sort_by_type": true,
+  "category_folders": { "Videos": "Videos", "Audio": "Audio" },
+  "cookies_browser": "",
+  "retries": 5
 }
 ```
 
-- `download_dir` — where files are saved. Must be a text path.
-- `cookies_browser` — one of `edge`, `chrome`, `brave`, `firefox`, `opera`,
-  `vivaldi`, `chromium`, or `""` to turn cookies off.
+Bad values are ignored and the defaults are used, so a broken file cannot
+crash the app. Settings from version 1 of the tool are upgraded
+automatically, and you are told once what changed.
 
-Bad values are ignored and the defaults are used, so a broken file cannot crash
-the app.
+## Project layout
+
+```
+fdl/
+  app.py            the menu
+  config.py         settings: load, check, save, upgrade
+  categories.py     extension -> folder
+  naming.py         safe file names
+  http_engine.py    direct links, resume, retry
+  ytdlp_engine.py   media sites
+  progress.py       the progress line
+  tools.py          finds ffmpeg / deno / aria2c
+  term.py           colours, sizes, times
+tests/              pytest suite
+```
+
+## Running the tests
+
+```bash
+pip install pytest
+python -m pytest
+```
+
+The tests start a small web server on your own computer, so no internet is
+needed. They cover file naming, categories, settings, and real resume —
+including a server that cuts the connection in the middle.
 
 ## Troubleshooting
 
 | Problem | What to do |
 |---|---|
-| Header shows `ffmpeg : NOT FOUND` | Run `winget install Gyan.FFmpeg`, then restart the app. |
-| "yt-dlp is NOT installed" at startup | Say yes to the install question, or run the command it prints. |
-| Download fails on YouTube | Update yt-dlp (option 5) first. Then try cookies (option 3). |
-| "Cannot use the save folder" | The drive or path does not exist. Use option 2 to pick another folder. |
-| Downloads go to the wrong place | Check the "Save folder" line in the header, and fix it with option 2. |
+| `ffmpeg : NOT FOUND` in the header | Run `winget install Gyan.FFmpeg`, then restart. |
+| "yt-dlp is NOT installed" | Say yes to the install question, or run the command it prints. |
+| Download fails on YouTube | Update yt-dlp (option 8), then try cookies (option 6). |
+| "Cannot use the folder" | The drive or path does not exist. Use option 4. |
+| A download keeps stopping | Just run it again, or use option 3. It continues from the last byte. |
+| Link needs a login (401/403) | The tool cannot download it without your cookies or a token. |
+
+## Roadmap
+
+The plan for the next versions is in **[ROADMAP.md](ROADMAP.md)**: faster
+multi-connection downloads, a download queue, history, checksum checks, and
+more.
 
 ## Legal note
 
