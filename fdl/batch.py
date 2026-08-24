@@ -124,10 +124,9 @@ def _prepare_one(item, cfg, history):
 
     part = Path(item.dest) / (item.name + ".part")
     if part.exists():
-        try:
-            item.resume_from = part.stat().st_size
-        except OSError:
-            item.resume_from = 0
+        meta = http_engine.read_meta(part)
+        if http_engine.meta_matches(meta, item.url, item.info):
+            item.resume_from = http_engine.part_progress(part, meta)
 
     if history:
         earlier = history.already_have(item.url)
@@ -187,7 +186,8 @@ def _download_one(index, item, cfg, progress, history, stop):
     try:
         saved = http_engine.download(
             item.url, item.dest, item.info, name=item.name,
-            retries=cfg.retries, on_progress=on_progress)
+            retries=cfg.retries, connections=cfg.connections,
+            speed_limit=cfg.speed_limit_bytes, on_progress=on_progress)
     except DownloadError as err:
         item.status = STATUS_FAILED
         item.error = str(err)

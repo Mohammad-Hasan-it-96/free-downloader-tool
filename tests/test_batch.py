@@ -1,6 +1,7 @@
 """Tests for the queue: checking links, then downloading many at once."""
 
 import hashlib
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -132,9 +133,23 @@ def test_prepare_reports_a_part_file_to_resume(server, cfg):
     folder = cfg.folder_for("Videos")
     folder.mkdir(parents=True)
     (folder / "movie.mp4.part").write_bytes(b"v" * 5_000)
+    (folder / "movie.mp4.part.meta").write_text(json.dumps({
+        "url": f"{server}/movie.mp4", "size": 30_000,
+        "etag": '"/movie.mp4"', "last_modified": None, "mode": "stream",
+    }), encoding="utf-8")
 
     items = batch.prepare([f"{server}/movie.mp4"], cfg)
     assert items[0].resume_from == 5_000
+
+
+def test_prepare_ignores_a_part_file_with_no_meta(server, cfg):
+    """Without a meta file we cannot prove the bytes belong to this link."""
+    folder = cfg.folder_for("Videos")
+    folder.mkdir(parents=True)
+    (folder / "movie.mp4.part").write_bytes(b"v" * 5_000)
+
+    items = batch.prepare([f"{server}/movie.mp4"], cfg)
+    assert items[0].resume_from == 0
 
 
 def test_prepare_does_not_probe_media_links(cfg):

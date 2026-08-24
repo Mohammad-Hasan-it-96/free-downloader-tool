@@ -67,14 +67,16 @@ This is the main request.
 - ⬜ If one engine fails, try the other before giving up.
 - ⬜ yt-dlp results also land in the right folder (`Videos` or `Audio`).
 
-## Phase 3 — Speed
+## Phase 3 — Speed ✅
 
-- ⬜ Use **aria2c** when it is installed (16 connections, built-in resume).
-  The tool finds it the same way it finds ffmpeg today.
-- ⬜ Without aria2c, use **multi-connection download in Python**: split the file
+- ✅ Use **aria2c** when it is installed (16 connections, built-in resume).
+  The tool finds it the same way it finds ffmpeg today. It is used for single
+  large downloads, where aria2c can print its own progress.
+- ✅ Without aria2c, use **multi-connection download in Python**: split the file
   into parts, download them at the same time, write into one file.
-  Only when the server supports `Range`.
-- ⬜ **Speed limit** setting, so a big download does not block your internet.
+  Only when the server supports `Range`. Used everywhere, including the queue.
+  Each part remembers its own progress, so a split download resumes correctly.
+- ✅ **Speed limit** setting, so a big download does not block your internet.
 
 ## Phase 4 — Queue and history ✅
 
@@ -133,6 +135,6 @@ These are useful, but they are not needed for a good tool. They go last.
 
 1. ✅ Phase 0 + Phase 1 — the restructure and the main feature.
 2. ✅ Phase 4 — queue and history.
-3. 🔨 Phase 3 — speed.
-4. Phase 2 — one smart "Download" option.
+3. ✅ Phase 3 — speed.
+4. 🔨 Phase 2 — one smart "Download" option.
 5. Phase 5, 6, 7 — polish, safety, and packaging.

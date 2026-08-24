@@ -6,17 +6,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import batch, http_engine, ytdlp_engine
+from . import aria2_engine, batch, http_engine, ytdlp_engine
 from .batch import KIND_FILE, KIND_MEDIA
 from .categories import CATEGORY_ORDER, category_for
 from .config import BROWSERS, Config
 from .history import (STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED, History,
                       short_time)
-from .http_engine import DownloadError
+from .http_engine import MODE_ARIA2, DownloadError
 from .multiprogress import MultiProgress
 from .progress import ProgressPrinter
 from .term import (ask_yes_no, bold, clear_screen, cyan, enable_colors, green,
                    grey, human_size, pause, red, yellow)
+from .segmented import wanted_connections
 from .tools import Toolbox, ytdlp_installed
 
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -67,9 +68,24 @@ def ask_url(prompt="\nPaste the URL: "):
     return input(bold(prompt)).strip().strip('"')
 
 
+def _speed_plan(cfg, toolbox, info):
+    """A short sentence about how this file will be downloaded."""
+    limit = ""
+    if cfg.speed_limit_kb:
+        limit = f", limited to {cfg.speed_limit_kb} KB/s"
+    if aria2_engine.is_useful_for(info, toolbox, cfg.use_aria2c):
+        return (f"aria2c, {aria2_engine.DEFAULT_CONNECTIONS} "
+                f"connections{limit}")
+    if info.size and info.resumable:
+        count = wanted_connections(info.size, cfg.connections)
+        if count > 1:
+            return f"{count} connections at once{limit}"
+    return f"1 connection{limit}"
+
+
 # --------------------------- one direct link ---------------------------- #
 
-def download_file(cfg, history, url):
+def download_file(cfg, toolbox, history, url):
     """Download a direct link, sorted into the folder for its type."""
     print(yellow("\nAsking the server about this file..."))
     try:
@@ -89,6 +105,7 @@ def download_file(cfg, history, url):
     print(f"  Save to  : {green(str(dest_dir))}")
     print(f"  Resume   : "
           f"{green('supported') if info.resumable else yellow('not supported')}")
+    print(f"  Speed    : {cyan(_speed_plan(cfg, toolbox, info))}")
 
     part_path = dest_dir / (info.filename + ".part")
     if part_path.exists():
@@ -104,10 +121,11 @@ def download_file(cfg, history, url):
         print(red("Cancelled."))
         return
 
-    _run_file_download(cfg, history, url, dest_dir, info)
+    _run_file_download(cfg, toolbox, history, url, dest_dir, info)
 
 
-def _run_file_download(cfg, history, url, dest_dir, info, name=None):
+def _run_file_download(cfg, toolbox, history, url, dest_dir, info,
+                       name=None, force_python=False):
     file_name = name or info.filename
     part_path = Path(dest_dir) / (file_name + ".part")
     already = part_path.stat().st_size if part_path.exists() else 0
@@ -123,12 +141,24 @@ def _run_file_download(cfg, history, url, dest_dir, info, name=None):
                         f"Retry {attempt}/{total_attempts} in {wait}s..."))
 
     category = category_for(file_name, info.content_type)
+    use_aria2 = (not force_python
+                 and aria2_engine.is_useful_for(info, toolbox, cfg.use_aria2c))
     print()
     try:
-        saved = http_engine.download(url, dest_dir, info, name=name,
-                                     retries=cfg.retries,
-                                     on_progress=on_progress,
-                                     on_retry=on_retry)
+        if use_aria2:
+            print(grey("Using aria2c for a faster download."))
+            print()
+            saved = aria2_engine.download(
+                url, dest_dir, info, toolbox=toolbox, name=name,
+                connections=aria2_engine.DEFAULT_CONNECTIONS,
+                speed_limit_kb=cfg.speed_limit_kb, retries=cfg.retries)
+        else:
+            saved = http_engine.download(url, dest_dir, info, name=name,
+                                         retries=cfg.retries,
+                                         connections=cfg.connections,
+                                         speed_limit=cfg.speed_limit_bytes,
+                                         on_progress=on_progress,
+                                         on_retry=on_retry)
     except DownloadError as err:
         bar.fail(red(f"\n[FAILED] {err}"))
         history.add(url, STATUS_FAILED, category=category, error=str(err))
@@ -139,7 +169,8 @@ def _run_file_download(cfg, history, url, dest_dir, info, name=None):
         print(yellow("Use 'Resume unfinished downloads' to continue it."))
         return None
 
-    bar.finish()
+    if not use_aria2:
+        bar.finish()
     print(green(f"[DONE] Saved to {saved}"))
     history.add(url, STATUS_DONE, path=saved, size=info.size,
                 category=category)
@@ -280,7 +311,7 @@ def _print_queue_summary(items):
 
 # ------------------------- unfinished downloads ------------------------- #
 
-def resume_unfinished(cfg, history):
+def resume_unfinished(cfg, toolbox, history):
     items = http_engine.unfinished_downloads(cfg.base_dir)
     if not items:
         print(green("\nThere are no unfinished downloads."))
@@ -366,8 +397,8 @@ def show_history(history):
 
     counts = history.counts()
     print(bold(f"\nLast {len(entries)} of {len(history.entries)} entries"))
-    print(grey(f"done {counts[STATUS_DONE]}  ·  "
-               f"failed {counts[STATUS_FAILED]}  ·  "
+    print(grey(f"done {counts[STATUS_DONE]}  |  "
+               f"failed {counts[STATUS_FAILED]}  |  "
                f"skipped {counts[STATUS_SKIPPED]}"))
     print()
 
@@ -382,7 +413,7 @@ def show_history(history):
             details.append(human_size(entry["size"]))
         if entry.get("category"):
             details.append(entry["category"])
-        print(f"      {grey('  ·  '.join(details))}")
+        print(f"      {grey('  |  '.join(details))}")
         if entry.get("error"):
             print(f"      {red(entry['error'])}")
 
@@ -439,6 +470,57 @@ def change_parallel(cfg):
     _save(cfg, f"Saved. The queue will run {cfg.max_parallel} at a time.")
 
 
+def change_connections(cfg):
+    print()
+    print(f"Connections per file: {cyan(str(cfg.connections))}")
+    print(grey("A big file is split into parts that download at the same "
+               "time. More is often faster, but some servers refuse. "
+               "1 turns splitting off. 1 to 32."))
+    value = input(bold("New number (blank to keep): ")).strip()
+    if not value:
+        return
+    if not value.isdigit() or not 1 <= int(value) <= 32:
+        print(red("Please type a number from 1 to 32."))
+        return
+    cfg.connections = int(value)
+    _save(cfg, f"Saved. Files will use up to {cfg.connections} connections.")
+
+
+def change_speed_limit(cfg):
+    current = (f"{cfg.speed_limit_kb} KB/s" if cfg.speed_limit_kb
+               else "no limit")
+    print()
+    print(f"Speed limit: {cyan(current)}")
+    print(grey("Keeps downloads from using all your internet. "
+               "Type 0 for no limit. The number is in KB per second, "
+               "for example 500."))
+    value = input(bold("New limit in KB/s (blank to keep): ")).strip()
+    if not value:
+        return
+    if not value.isdigit():
+        print(red("Please type a whole number, or 0 for no limit."))
+        return
+    cfg.speed_limit_kb = int(value)
+    if cfg.speed_limit_kb:
+        _save(cfg, f"Saved. Downloads are limited to "
+                   f"{cfg.speed_limit_kb} KB/s.")
+    else:
+        _save(cfg, "Saved. There is no speed limit.")
+
+
+def toggle_aria2c(cfg, toolbox):
+    cfg.use_aria2c = not cfg.use_aria2c
+    if cfg.use_aria2c and not aria2_engine.executable(toolbox):
+        _save(cfg, "aria2c will be used when it is installed. It is not "
+                   "installed now, so the built-in downloader is used. "
+                   "Install it with:  winget install aria2.aria2")
+        return
+    if cfg.use_aria2c:
+        _save(cfg, "aria2c is ON for single large downloads.")
+    else:
+        _save(cfg, "aria2c is OFF. The built-in downloader is always used.")
+
+
 def change_cookies(cfg):
     print(bold("\nUse cookies from a browser to bypass YouTube's "
                "'not a bot' check."))
@@ -471,13 +553,16 @@ def _save(cfg, message):
 SETTINGS_MENU = [
     ("1", "Base folder"),
     ("2", "Sorting by file type (on / off)"),
-    ("3", "Downloads at the same time"),
-    ("4", "Browser for cookies"),
+    ("3", "Downloads at the same time (the queue)"),
+    ("4", "Connections per file (speed)"),
+    ("5", "Speed limit"),
+    ("6", "Use aria2c when installed (on / off)"),
+    ("7", "Browser for cookies"),
     ("0", "Back"),
 ]
 
 
-def settings_screen(cfg):
+def settings_screen(cfg, toolbox):
     while True:
         clear_screen()
         print(bold(cyan("SETTINGS")))
@@ -486,6 +571,15 @@ def settings_screen(cfg):
         print(f"  Sort by type           : "
               f"{green('on') if cfg.sort_by_type else yellow('off')}")
         print(f"  Downloads at once      : {cyan(str(cfg.max_parallel))}")
+        print(f"  Connections per file   : {cyan(str(cfg.connections))}")
+        limit = (f"{cfg.speed_limit_kb} KB/s" if cfg.speed_limit_kb
+                 else "no limit")
+        print(f"  Speed limit            : {cyan(limit)}")
+        aria2 = "off"
+        if cfg.use_aria2c:
+            aria2 = ("on" if aria2_engine.executable(toolbox)
+                     else "on (not installed)")
+        print(f"  Use aria2c             : {cyan(aria2)}")
         print(f"  Retries per download   : {cyan(str(cfg.retries))}")
         print(f"  Cookies from           : "
               f"{green(cfg.cookies_browser) if cfg.cookies_browser else yellow('off')}")
@@ -504,6 +598,15 @@ def settings_screen(cfg):
             change_parallel(cfg)
             pause()
         elif choice == "4":
+            change_connections(cfg)
+            pause()
+        elif choice == "5":
+            change_speed_limit(cfg)
+            pause()
+        elif choice == "6":
+            toggle_aria2c(cfg, toolbox)
+            pause()
+        elif choice == "7":
             change_cookies(cfg)
             pause()
         elif choice == "0":
@@ -569,7 +672,10 @@ def draw_header(cfg, toolbox):
           f"    aria2c: "
           f"{green('ready') if toolbox.aria2c_dir else grey('none')}")
     cookies = cfg.cookies_browser
-    print(f"Cookies from : {green(cookies) if cookies else yellow('off')}")
+    speed = (f"    Limit: {cyan(str(cfg.speed_limit_kb) + ' KB/s')}"
+             if cfg.speed_limit_kb else "")
+    print(f"Cookies from : {green(cookies) if cookies else yellow('off')}"
+          f"{speed}")
     print()
 
 
@@ -616,19 +722,19 @@ def main():
         elif choice == "2":
             url = ask_url()
             if url:
-                download_file(cfg, history, url)
+                download_file(cfg, toolbox, history, url)
             pause()
         elif choice == "3":
             download_queue(cfg, toolbox, history)
             pause()
         elif choice == "4":
-            resume_unfinished(cfg, history)
+            resume_unfinished(cfg, toolbox, history)
             pause()
         elif choice == "5":
             show_history(history)
             pause()
         elif choice == "6":
-            settings_screen(cfg)
+            settings_screen(cfg, toolbox)
         elif choice == "7":
             tools_screen(cfg, toolbox)
         elif choice == "0":

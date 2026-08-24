@@ -29,6 +29,9 @@ def defaults():
         "cookies_browser": "",
         "retries": 5,
         "max_parallel": 3,
+        "connections": 8,
+        "speed_limit_kb": 0,
+        "use_aria2c": True,
         "history_limit": 500,
         "notice": "",
     }
@@ -117,6 +120,35 @@ class Config:
         self.data["max_parallel"] = max(1, min(8, int(value)))
 
     @property
+    def connections(self):
+        return self.data["connections"]
+
+    @connections.setter
+    def connections(self, value):
+        self.data["connections"] = max(1, min(32, int(value)))
+
+    @property
+    def speed_limit_kb(self):
+        return self.data["speed_limit_kb"]
+
+    @speed_limit_kb.setter
+    def speed_limit_kb(self, value):
+        self.data["speed_limit_kb"] = max(0, int(value))
+
+    @property
+    def speed_limit_bytes(self):
+        """The limit in bytes per second. 0 means no limit."""
+        return self.data["speed_limit_kb"] * 1024
+
+    @property
+    def use_aria2c(self):
+        return self.data["use_aria2c"]
+
+    @use_aria2c.setter
+    def use_aria2c(self, value):
+        self.data["use_aria2c"] = bool(value)
+
+    @property
     def history_limit(self):
         return self.data["history_limit"]
 
@@ -168,6 +200,17 @@ def _validated(raw):
     parallel = raw.get("max_parallel")
     if isinstance(parallel, int) and not isinstance(parallel, bool):
         result["max_parallel"] = max(1, min(8, parallel))
+
+    connections = raw.get("connections")
+    if isinstance(connections, int) and not isinstance(connections, bool):
+        result["connections"] = max(1, min(32, connections))
+
+    speed = raw.get("speed_limit_kb")
+    if isinstance(speed, int) and not isinstance(speed, bool):
+        result["speed_limit_kb"] = max(0, speed)
+
+    if isinstance(raw.get("use_aria2c"), bool):
+        result["use_aria2c"] = raw["use_aria2c"]
 
     limit = raw.get("history_limit")
     if isinstance(limit, int) and not isinstance(limit, bool):

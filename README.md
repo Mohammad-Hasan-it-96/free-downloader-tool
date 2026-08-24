@@ -17,7 +17,7 @@ Every file is sorted into a folder by its type, so your downloads stay tidy.
 ========================================================
 Base folder  : D:\Downloads
 Sort by type : on    At once: 3
-ffmpeg       : ready    deno: ready    aria2c: none
+ffmpeg       : ready    deno: ready    aria2c: ready
 Cookies from : off
 
   1. Download from a site (video / audio)
@@ -42,6 +42,11 @@ Cookies from : off
   the URL. Illegal characters are removed, and an existing file is never
   overwritten by accident.
 - **Live progress**: percent, size, speed, and time left.
+- **Fast.** A big file is split and downloaded over several connections at
+  once. On a real 10.5 MB test this was **2.2x faster** than one connection,
+  and the result was byte-for-byte the same. `aria2c` is used instead when it
+  is installed.
+- **Speed limit**, so a download does not take all your internet.
 - **A queue.** Paste many links at once, or point at a `.txt` list. Several
   download at the same time, each with its own progress line.
 - **History.** Every download is recorded, and a link you already have is
@@ -75,12 +80,13 @@ when the file has no useful extension.
 | yt-dlp | media sites | `pip install -U yt-dlp` |
 | ffmpeg | merging HD video + audio, and MP3 | `winget install Gyan.FFmpeg` |
 | deno | JavaScript that yt-dlp needs for YouTube | `winget install DenoLand.Deno` |
+| aria2c | even faster single downloads (optional) | `winget install aria2.aria2` |
 
 Direct file links need **only Python** — no extra install. If yt-dlp is
 missing, the app tells you at startup and offers to install it.
 
-`aria2c` is shown in the header but is not used yet. It is planned for faster
-downloads — see the [roadmap](ROADMAP.md).
+`aria2c` is optional. Without it the built-in multi-connection downloader is
+used, which is already much faster than one connection.
 
 ## How to run
 
@@ -105,6 +111,7 @@ shows you what it found:
   Type     : Archives
   Save to  : D:\Downloads\Archives
   Resume   : supported
+  Speed    : 8 connections at once
 ```
 
 While a download runs, the file is written as `name.part`. If you press
@@ -147,6 +154,41 @@ setting (1 to 8, default 3).
 
 Media links in a queue are handled one after another, because yt-dlp shows
 its own progress.
+
+## Speed
+
+A big file is cut into parts, and the parts download at the same time. This
+only happens when the server allows it, and only for files above 2 MB.
+
+| Setting | What it does | Default |
+|---|---|---|
+| Connections per file | How many parts of one file download together (1 to 32). 1 turns splitting off. | 8 |
+| Downloads at once | How many files the queue runs together (1 to 8). | 3 |
+| Speed limit | Highest total speed, in KB per second. 0 means no limit. | 0 |
+| Use aria2c | Use aria2c for single large downloads, when it is installed. | on |
+
+Before a single download starts, the tool tells you what it will do:
+
+```
+  Speed    : 8 connections at once
+```
+
+A split download is **not** the same as a normal one on disk. The `.part`
+file is created at its full size right away, so its size does not tell you
+how much is done. The real progress of every part is kept in the
+`.part.meta` file next to it.
+
+This matters for resume. The meta file records **how** the part was written:
+
+| Mode | Written by | Continued by |
+|---|---|---|
+| `stream` | one connection, bytes in order | this tool |
+| `segments` | several connections, bytes out of order | this tool |
+| `aria2` | the aria2c program | aria2c only |
+
+The tool always reads the mode before it continues a file, so a part is
+never continued by the wrong method. If it cannot be continued safely, the
+download starts again instead of making a damaged file.
 
 ## History
 
@@ -207,6 +249,9 @@ Settings live in `config.json`, next to the app. It is created on first run.
   "cookies_browser": "",
   "retries": 5,
   "max_parallel": 3,
+  "connections": 8,
+  "speed_limit_kb": 0,
+  "use_aria2c": true,
   "history_limit": 500
 }
 ```
@@ -226,7 +271,10 @@ fdl/
   config.py         settings: load, check, save, upgrade
   categories.py     extension -> folder
   naming.py         safe file names
-  http_engine.py    direct links, resume, retry
+  http_engine.py    direct links, resume, retry, choosing the mode
+  segmented.py      one file over several connections
+  aria2_engine.py   the aria2c program, when it is installed
+  limiter.py        the shared speed limit
   ytdlp_engine.py   media sites
   progress.py       the progress line
   tools.py          finds ffmpeg / deno / aria2c
@@ -242,8 +290,10 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. They cover file naming, categories, settings, history, the queue, and
-real resume — including a server that cuts the connection in the middle.
+needed. 132 tests cover file naming, categories, settings, history, the
+queue, the speed limit, multi-connection downloads, and real resume —
+including a server that cuts the connection in the middle, and the check that
+a split part file is never continued the wrong way.
 
 ## Troubleshooting
 
@@ -259,8 +309,8 @@ real resume — including a server that cuts the connection in the middle.
 ## Roadmap
 
 The plan for the next versions is in **[ROADMAP.md](ROADMAP.md)**: faster
-multi-connection downloads, a download queue, history, checksum checks, and
-more.
+checksum checks, a free space check, clipboard watch, proxy settings, and
+packaging.
 
 ## Legal note
 
