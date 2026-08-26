@@ -20,6 +20,48 @@ QUALITY_PRESETS = {
 
 AUDIO_CHOICES = {"AUDIO_MP3"}
 
+# `run()` below starts yt-dlp with `sys.executable -m yt_dlp`. That is right
+# for a normal Python run, but inside the single .exe `sys.executable` is the
+# .exe itself, and its bootloader ignores `-m`. Without the two helpers here,
+# the .exe would simply open a second copy of its own menu, and no video
+# would ever download. The launcher checks `wants_passthrough` first.
+PASSTHROUGH = ("-m", "yt_dlp")
+
+
+def wants_passthrough(argv):
+    """The yt-dlp arguments inside `argv`, or None for a normal start.
+
+    `argv` is the list after the program name, so
+    `["-m", "yt_dlp", "-F", url]` gives back `["-F", url]`.
+    """
+    if len(argv) >= len(PASSTHROUGH) and tuple(argv[:2]) == PASSTHROUGH:
+        return list(argv[2:])
+    return None
+
+
+def _exit_code(code):
+    """yt-dlp exits with a number, with None, or with a message to print."""
+    if code is None:
+        return 0
+    if isinstance(code, int):
+        return code
+    print(code, file=sys.stderr)
+    return 1
+
+
+def run_passthrough(args):
+    """Run yt-dlp in this process. Returns the exit code."""
+    try:
+        from yt_dlp import main as ytdlp_main
+    except ImportError:
+        print("yt-dlp is missing from this build.", file=sys.stderr)
+        return 1
+    try:
+        ytdlp_main(args)
+    except SystemExit as stop:
+        return _exit_code(stop.code)
+    return 0
+
 
 def single_file_selector(height):
     """A format that needs no merging, for when ffmpeg is missing."""

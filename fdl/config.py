@@ -1,7 +1,6 @@
 """Settings: load, check, save, and upgrade from the old format."""
 
 import json
-import os
 from pathlib import Path
 
 from .categories import CATEGORY_ORDER
@@ -13,12 +12,14 @@ BROWSERS = ["edge", "chrome", "brave", "firefox", "opera", "vivaldi",
 
 
 def default_base_dir():
-    """Prefer D:\\Downloads on Windows, so the C: drive stays free."""
-    if os.name == "nt":
-        if Path("D:\\").exists():
-            return "D:\\Downloads"
-        return str(Path.home() / "Downloads" / "FreeDownloader")
-    return str(Path.home() / "Downloads")
+    """The user's own Downloads folder, which every computer has.
+
+    An older version preferred D:\\Downloads on Windows. That is right for
+    one machine only. On another computer D: can be a DVD drive, a USB
+    stick, or missing, and the first download then fails. A folder that is
+    already saved in config.json is never changed by this.
+    """
+    return str(Path.home() / "Downloads" / "FreeDownloader")
 
 
 def defaults():

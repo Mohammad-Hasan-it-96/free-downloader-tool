@@ -72,8 +72,20 @@ def test_xdg_config_home_is_used(monkeypatch, tmp_path):
     assert paths.user_data_dir() == tmp_path / "cfg" / paths.UNIX_NAME
 
 
-def test_the_app_reads_its_paths_from_this_module():
-    app = importlib.import_module("fdl.app")
-    assert app.CONFIG_PATH == paths.config_path()
-    assert app.HISTORY_PATH == paths.history_path()
-    assert app.LOG_PATH == paths.log_path()
+def test_the_app_reads_its_paths_from_this_module(monkeypatch, tmp_path):
+    """The app must take its three paths from here, and nowhere else.
+
+    fdl.app reads them once, when it is imported. So the module is imported
+    again with a folder we choose, which makes the test give the same answer
+    whatever imported fdl.app first.
+    """
+    module = importlib.import_module("fdl.app")
+    monkeypatch.setenv("FDL_HOME", str(tmp_path / "home"))
+    try:
+        app = importlib.reload(module)
+        assert app.CONFIG_PATH == paths.config_path()
+        assert app.HISTORY_PATH == paths.history_path()
+        assert app.LOG_PATH == paths.log_path()
+    finally:
+        monkeypatch.undo()          # back to the environment we started in
+        importlib.reload(module)

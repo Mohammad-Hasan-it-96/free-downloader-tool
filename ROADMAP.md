@@ -124,6 +124,41 @@ This is the main request.
   3.11, and 3.13, and the package is built and checked.
 - ✅ Optional single `.exe` build with PyInstaller, for people without Python.
 
+## Phase 8 — ready for other people
+
+Everything above assumes the person already has Python, and a `D:` drive.
+This phase is about someone else's computer.
+
+**Step 1 — make the .exe correct** ✅
+
+- ✅ **The .exe can download videos.** `ytdlp_engine.run()` starts yt-dlp with
+  `sys.executable -m yt_dlp`. Inside the .exe, `sys.executable` is the .exe
+  itself and `-m` is ignored, so that call used to open a second copy of the
+  menu. Every video download in the .exe silently failed this way. The
+  launcher now catches the call and hands it to yt-dlp.
+- ✅ **No pip offer inside the .exe.** There is no pip in a frozen build, so
+  the old "Install it now with pip?" question was a dead end.
+- ✅ **A default folder that exists everywhere.** The old default was
+  `D:\Downloads`. On another computer `D:` can be a DVD drive, a USB stick, or
+  missing. The default is now `Downloads\FreeDownloader` in the user's own
+  folder. A folder already saved in `config.json` is not changed.
+
+**Step 2 — make it reachable** ⬜
+
+- ⬜ A GitHub release that builds the `.exe` on `windows-latest` and attaches
+  it to a tag. Right now `dist/` is ignored by git, so nobody can get it.
+- ⬜ Publish the SHA-256 of the `.exe`, and explain the SmartScreen warning
+  that an unsigned program shows.
+
+**Step 3 — make it friendly** ⬜
+
+- ⬜ The `.bat` file should try `py -3`, then `python`, and print the
+  python.org link when neither works. On a clean Windows 11, `python` opens
+  the Microsoft Store instead.
+- ⬜ A Tools option that installs ffmpeg, deno, and aria2c with `winget`.
+- ⬜ A short first-run screen: choose a folder, then start.
+- ⬜ A daily update check against the GitHub releases API.
+
 ## Maybe later
 
 These are useful, but they are not needed for a good tool. They go last.
@@ -151,4 +186,8 @@ These are useful, but they are not needed for a good tool. They go last.
 6. ✅ Phase 6 — convenience.
 7. ✅ Phase 7 — packaging and quality.
 
-All planned phases are done. What is left is in **Maybe later**.
+8. 🔄 Phase 8 — ready for other people. Step 1 is done. Steps 2 and 3 are
+   still open.
+
+Phases 0 to 7 are done. Phase 8 is what turns this from "my tool" into a tool
+anyone can download.

@@ -36,11 +36,24 @@ def install_ytdlp():
     importlib.invalidate_caches()
 
 
+def is_frozen():
+    """True when this is the single .exe built by PyInstaller."""
+    return bool(getattr(sys, "frozen", False))
+
+
 def ensure_ytdlp():
     """Check yt-dlp before the menu, so the error is clear. True = ready."""
     if ytdlp_installed():
         return True
     clear_screen()
+    if is_frozen():
+        # There is no pip inside the .exe, so offering to install would be a
+        # dead end. yt-dlp is meant to be built in.
+        print(red("This build is missing yt-dlp, so video sites cannot work."))
+        print(grey("\nPlease download the app again from the releases page. "
+                   "Direct file links still work without it."))
+        return ask_yes_no("\nContinue anyway (direct file links only)?",
+                          default_no=False)
     print(red("yt-dlp is NOT installed for this Python:"))
     print(f"  {cyan(sys.executable)}")
     print(grey("\nyt-dlp is needed for video sites. Direct file links would "
@@ -1117,6 +1130,11 @@ def main():
 
 
 def run():
+    # Inside the single .exe, yt-dlp is started by running this same .exe
+    # again. That call must reach yt-dlp, not the menu. See ytdlp_engine.
+    passthrough = ytdlp_engine.wants_passthrough(sys.argv[1:])
+    if passthrough is not None:
+        sys.exit(ytdlp_engine.run_passthrough(passthrough))
     try:
         main()
     except KeyboardInterrupt:

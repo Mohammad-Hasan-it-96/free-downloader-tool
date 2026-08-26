@@ -67,7 +67,9 @@ Cookies from : off
 
 ## Where files are saved
 
-The base folder is yours to choose. Inside it:
+The base folder is yours to choose. The first run picks
+`Downloads\FreeDownloader` inside your user folder, because every computer has
+one. Change it in **Settings → Base folder**. Inside it:
 
 | Folder | Examples |
 |---|---|
@@ -143,6 +145,9 @@ python build_exe.py
 The result is `dist/FreeDownloader.exe`. Python and yt-dlp are inside it, so
 it is about 30 MB. ffmpeg, deno, and aria2c are **not** inside; the app still
 finds them if they are installed, and says what to do when they are missing.
+
+The `.exe` starts yt-dlp by running itself again, so video sites work with no
+Python on the computer at all.
 
 ## Downloading one link
 
@@ -492,9 +497,10 @@ a split part file is never continued the wrong way.
 
 ## Roadmap
 
-All seven planned phases are done. See **[ROADMAP.md](ROADMAP.md)** for what
-was built and what is still on the "maybe later" list: faster
-torrents through aria2c, a scheduler, and browser integration.
+Phases 0 to 7 are done. Phase 8 makes the tool easy for other people to
+install, and step 1 of it is done. See **[ROADMAP.md](ROADMAP.md)** for what
+was built, what is left, and the "maybe later" list: faster torrents through
+aria2c, a scheduler, and browser integration.
 
 ## Legal note
 
