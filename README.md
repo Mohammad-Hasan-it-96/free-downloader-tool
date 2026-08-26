@@ -53,10 +53,10 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 |  [##############################################]              |
 |  C:\Users\me\Downloads\FreeDownloader\Documents\README.rst     |
 |                                                                |
-|  https://example.com/this-one-does-not-exist.zip     failed    |
-|  The file was not found (404).                                 |
+|  https://example.com/this-one-does-not-exist.zip  failed [Retry]|
+|  Attempt 2. The file was not found (404).                      |
 +----------------------------------------------------------------+
-|  [Settings]   1 in progress, 1 done, 1 failed    [Open folder] |
+|  [Settings]  1 done, 1 failed   [Retry failed] [Open folder]    |
 +----------------------------------------------------------------+
 ```
 
@@ -67,6 +67,9 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
   page.
 - **Stop** keeps the part of the file already downloaded, so it can continue
   later. **Open** shows the finished file in Explorer.
+- A row that failed gets a **Retry** button, and **Retry failed** at the
+  bottom tries all of them at once. A retry continues from the byte the
+  first try reached, so nothing is downloaded twice.
 - **Settings** covers the folder, sorting, speed, cookies, and updates.
 
 The window needs no extra install: it uses tkinter, which comes with Python

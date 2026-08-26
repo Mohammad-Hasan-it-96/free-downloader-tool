@@ -55,6 +55,10 @@ class Job:
     error: str = ""
     warnings: list = field(default_factory=list)
     stop: threading.Event = field(default_factory=threading.Event)
+    # Kept so the same row can be run again with the same choices.
+    quality: str = "1"
+    whole_playlist: bool = False
+    attempts: int = 1
 
     @property
     def label(self):
@@ -67,6 +71,12 @@ class Job:
     @property
     def can_cancel(self):
         return self.status in (CHECKING, WAITING, RUNNING)
+
+    @property
+    def can_retry(self):
+        """Only what went wrong. A finished file has nothing to try again,
+        and a skipped one is already on the disk."""
+        return self.status in (FAILED, CANCELLED)
 
 
 class Manager:
@@ -91,11 +101,49 @@ class Manager:
 
     def add(self, url, quality="1", whole_playlist=False):
         """Start one link. Returns the Job at once, before anything runs."""
-        job = Job(job_id=next(self._ids), url=url.strip())
+        job = Job(job_id=next(self._ids), url=url.strip(), quality=quality,
+                  whole_playlist=whole_playlist)
         self.jobs[job.job_id] = job
         self._announce(job)
         self._pool.submit(self._guarded, job, quality, whole_playlist)
         return job
+
+    def retry(self, job_id):
+        """Run a failed or stopped job again, in the same row.
+
+        A part file left behind is not touched, so a big download carries on
+        from the byte it reached instead of starting over.
+        """
+        job = self.jobs.get(job_id)
+        if job is None or not job.can_retry:
+            return None
+
+        job.status = CHECKING
+        job.error = ""
+        job.warnings = []
+        job.message = "trying again..."
+        job.percent = 0.0
+        job.done_bytes = 0
+        job.speed = 0.0
+        job.path = None
+        job.attempts += 1
+        # A fresh one: the old event is still set from the last stop.
+        job.stop = threading.Event()
+
+        self._announce(job)
+        self._pool.submit(self._guarded, job, job.quality, job.whole_playlist)
+        return job
+
+    def retry_all(self):
+        """Try every failed job again. Returns how many were started."""
+        started = [job for job in list(self.jobs.values()) if job.can_retry]
+        for job in started:
+            self.retry(job.job_id)
+        return len(started)
+
+    @property
+    def failed(self):
+        return [job for job in self.jobs.values() if job.can_retry]
 
     def cancel(self, job_id):
         job = self.jobs.get(job_id)

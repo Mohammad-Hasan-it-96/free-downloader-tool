@@ -55,9 +55,12 @@ def right_text(job):
 class Row(ttk.Frame):
     """One download. Built once, then only its text and bar change."""
 
-    def __init__(self, parent, job, on_cancel, on_open):
+    def __init__(self, parent, job, on_cancel, on_open, on_retry):
         super().__init__(parent, padding=(8, 6))
         self.job = job
+        self._on_cancel = on_cancel
+        self._on_open = on_open
+        self._on_retry = on_retry
         self.columnconfigure(0, weight=1)
 
         self.title = ttk.Label(self, text=job.label, anchor="w",
@@ -71,7 +74,6 @@ class Row(ttk.Frame):
         self.button = ttk.Button(self, text="Stop", width=7,
                                  command=lambda: on_cancel(job.job_id))
         self.button.grid(row=0, column=2, rowspan=2, padx=(8, 0))
-        self._on_open = on_open
 
         self.bar = ttk.Progressbar(self, maximum=100, length=100)
         self.bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
@@ -103,6 +105,8 @@ class Row(ttk.Frame):
             self.bar.configure(mode="determinate", value=job.percent)
 
         note = right_text(job)
+        if job.attempts > 1:
+            note = f"Attempt {job.attempts}. " + note
         if job.warnings:
             note = (note + "\n" if note else "") + "\n".join(job.warnings)
         self.detail.configure(
@@ -110,23 +114,29 @@ class Row(ttk.Frame):
             foreground="#b3261e" if job.status == job_state.FAILED
             else "#555555")
 
-        if job.is_finished:
-            if job.status == job_state.DONE and job.path is not None:
-                self.button.configure(text="Open", state="normal",
-                                      command=lambda: self._on_open(self.job))
-            else:
-                self.button.configure(text="Stop", state="disabled")
+        if job.status == job_state.DONE and job.path is not None:
+            self.button.configure(text="Open", state="normal",
+                                  command=lambda: self._on_open(self.job))
+        elif job.can_retry:
+            self.button.configure(
+                text="Retry", state="normal",
+                command=lambda: self._on_retry(self.job.job_id))
+        elif job.is_finished:
+            self.button.configure(text="Stop", state="disabled")
         else:
-            self.button.configure(text="Stop", state="normal")
+            self.button.configure(
+                text="Stop", state="normal",
+                command=lambda: self._on_cancel(self.job.job_id))
 
 
 class RowList(ttk.Frame):
     """A scrolling box of Rows. Newest at the top."""
 
-    def __init__(self, parent, on_cancel, on_open):
+    def __init__(self, parent, on_cancel, on_open, on_retry):
         super().__init__(parent)
         self._on_cancel = on_cancel
         self._on_open = on_open
+        self._on_retry = on_retry
         self.rows = {}
 
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
@@ -161,7 +171,8 @@ class RowList(ttk.Frame):
             self.empty = None
         row = self.rows.get(job.job_id)
         if row is None:
-            row = Row(self.inner, job, self._on_cancel, self._on_open)
+            row = Row(self.inner, job, self._on_cancel, self._on_open,
+                      self._on_retry)
             row.pack(fill="x", expand=True)
             ttk.Separator(self.inner, orient="horizontal").pack(fill="x")
             self.rows[job.job_id] = row

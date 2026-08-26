@@ -109,7 +109,8 @@ class MainWindow(tk.Tk):
         self.news.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
         self.news.grid_remove()
 
-        self.list = RowList(outer, self._cancel, self._open_job)
+        self.list = RowList(outer, self._cancel, self._open_job,
+                            self._retry)
         self.list.grid(row=3, column=0, sticky="nsew")
 
         bottom = ttk.Frame(outer)
@@ -120,8 +121,12 @@ class MainWindow(tk.Tk):
         self.status = ttk.Label(bottom, text="", foreground="#555555",
                                 font=("Segoe UI", 9))
         self.status.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self.retry_button = ttk.Button(bottom, text="Retry failed",
+                                       command=self._retry_all)
+        self.retry_button.grid(row=0, column=2, padx=(6, 6))
+        self.retry_button.grid_remove()
         ttk.Button(bottom, text="Open folder",
-                   command=self._open_base_folder).grid(row=0, column=2)
+                   command=self._open_base_folder).grid(row=0, column=3)
 
         self._refresh_folder()
         self._check_tools()
@@ -170,6 +175,17 @@ class MainWindow(tk.Tk):
     def _cancel(self, job_id):
         self.manager.cancel(job_id)
 
+    def _retry(self, job_id):
+        job = self.manager.retry(job_id)
+        if job is not None:
+            self.list.show(job)
+            self._say(self.summary())
+
+    def _retry_all(self):
+        started = self.manager.retry_all()
+        if started:
+            self._say(f"Trying {started} again.")
+
     def _open_job(self, job):
         target = job.path or job.dest
         if target is None:
@@ -216,7 +232,15 @@ class MainWindow(tk.Tk):
                 postaction.run(self.cfg.after_download, job.path)
         if changed:
             self._say(self.summary())
+            self._show_retry_button()
         self.after(POLL_MS, self._drain)
+
+    def _show_retry_button(self):
+        """The button is only there when there is something to try again."""
+        if self.manager.failed:
+            self.retry_button.grid()
+        else:
+            self.retry_button.grid_remove()
 
     def summary(self):
         """One line counting what is happening, for the bottom of the window."""

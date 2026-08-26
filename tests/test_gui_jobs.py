@@ -248,6 +248,157 @@ def test_cancel_does_nothing_to_a_finished_job(setup):
     assert job.stop.is_set() is False
 
 
+# -------------------------------- retrying ------------------------------- #
+
+def test_a_failed_job_can_be_tried_again(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    tries = []
+
+    def download(*_a, **_kw):
+        tries.append(1)
+        if len(tries) == 1:
+            raise DownloadError("The connection was lost.")
+        return tmp_path / "thing.zip"
+
+    monkeypatch.setattr(jobs.http_engine, "download", download)
+
+    job = manager.add("https://example.com/thing.zip")
+    assert job.status == jobs.FAILED
+
+    manager.retry(job.job_id)
+
+    assert job.status == jobs.DONE
+    assert len(tries) == 2
+
+
+def test_retrying_clears_the_old_error(setup, monkeypatch, tmp_path):
+    """A stale red line under a running download would be confusing."""
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: tmp_path / "thing.zip")
+
+    job = jobs.Job(job_id=1, url="https://example.com/thing.zip",
+                   status=jobs.FAILED, error="The file was not found (404).",
+                   warnings=["close that browser"], percent=42.0)
+    manager.jobs[1] = job
+
+    manager.retry(1)
+
+    assert job.error == ""
+    assert job.warnings == []
+    assert job.status == jobs.DONE
+
+
+def test_retrying_counts_the_attempts(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: (_ for _ in ()).throw(
+                            DownloadError("no")))
+
+    job = manager.add("https://example.com/thing.zip")
+    assert job.attempts == 1
+
+    manager.retry(job.job_id)
+    manager.retry(job.job_id)
+
+    assert job.attempts == 3
+
+
+def test_retrying_uses_the_choices_from_the_first_time(setup, monkeypatch):
+    """The quality box may have changed since. The row keeps its own."""
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, media_item())
+    seen = []
+
+    def stream(args, *_a, **_kw):
+        seen.append(list(args))
+        return 1
+
+    monkeypatch.setattr(jobs.ytdlp_engine, "run_streaming", stream)
+
+    job = manager.add("https://youtu.be/abc", quality="6",
+                      whole_playlist=True)
+    manager.retry(job.job_id)
+
+    assert len(seen) == 2
+    for args in seen:
+        assert "--yes-playlist" in args
+    assert job.category == "Audio"          # quality 6 is audio only
+
+
+def test_a_stopped_job_can_be_tried_again(setup, monkeypatch, tmp_path):
+    """The old stop signal must not kill the new attempt at once."""
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: tmp_path / "thing.zip")
+
+    job = jobs.Job(job_id=1, url="https://example.com/thing.zip",
+                   status=jobs.CANCELLED)
+    job.stop.set()
+    manager.jobs[1] = job
+
+    manager.retry(1)
+
+    assert job.stop.is_set() is False
+    assert job.status == jobs.DONE
+
+
+@pytest.mark.parametrize("status", [jobs.DONE, jobs.SKIPPED, jobs.RUNNING,
+                                    jobs.CHECKING])
+def test_only_broken_jobs_offer_a_retry(status):
+    assert jobs.Job(status=status).can_retry is False
+
+
+@pytest.mark.parametrize("status", [jobs.FAILED, jobs.CANCELLED])
+def test_a_broken_job_offers_a_retry(status):
+    assert jobs.Job(status=status).can_retry is True
+
+
+def test_retrying_something_finished_does_nothing(setup, monkeypatch,
+                                                  tmp_path):
+    manager, _cfg, _history = setup
+    monkeypatch.setattr(jobs.batch, "prepare",
+                        lambda *a, **kw: pytest.fail("must not run again"))
+    manager.jobs[1] = jobs.Job(job_id=1, status=jobs.DONE)
+
+    assert manager.retry(1) is None
+
+
+def test_retrying_an_unknown_job_does_nothing(setup):
+    manager, _cfg, _history = setup
+    assert manager.retry(999) is None
+
+
+def test_retry_all_takes_only_the_failed_ones(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: tmp_path / "thing.zip")
+
+    manager.jobs[1] = jobs.Job(job_id=1, url="https://a/1.zip",
+                               status=jobs.FAILED)
+    manager.jobs[2] = jobs.Job(job_id=2, url="https://a/2.zip",
+                               status=jobs.DONE)
+    manager.jobs[3] = jobs.Job(job_id=3, url="https://a/3.zip",
+                               status=jobs.CANCELLED)
+
+    assert manager.retry_all() == 2
+    assert manager.jobs[1].status == jobs.DONE
+    assert manager.jobs[3].status == jobs.DONE
+
+
+def test_the_failed_list_drives_the_retry_button(setup):
+    manager, _cfg, _history = setup
+    assert manager.failed == []
+    manager.jobs[1] = jobs.Job(job_id=1, status=jobs.FAILED)
+    manager.jobs[2] = jobs.Job(job_id=2, status=jobs.DONE)
+    assert [job.job_id for job in manager.failed] == [1]
+
+
 # ------------------------------- a media page ---------------------------- #
 
 def media_item():

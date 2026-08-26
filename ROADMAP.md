@@ -215,7 +215,10 @@ Three choices were made before any code:
 | What opens | **Window on double-click** | The `.bat` and the `.exe` open the window. Typing `fdl` in a terminal still opens the menu. |
 
 - ✅ One window: paste a link, add it, watch a bar per download, stop one,
-  open a finished file.
+  open a finished file, and try a failed one again.
+- ✅ **Retry**, on the row that failed and on all of them at once. The row
+  is reused, the old error is cleared, and the part file is left alone so
+  the download carries on instead of starting over.
 - ✅ The same routing as the menu, so a video page still goes to yt-dlp and a
   file link still goes to the fast downloader, with no question asked.
 - ✅ yt-dlp progress is read from its own output and shown as a real bar. The
