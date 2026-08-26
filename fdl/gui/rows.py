@@ -76,11 +76,17 @@ class Row(ttk.Frame):
         self.bar = ttk.Progressbar(self, maximum=100, length=100)
         self.bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
-        self.detail = ttk.Label(self, text="", anchor="w",
+        self.detail = ttk.Label(self, text="", anchor="w", justify="left",
                                 font=("Segoe UI", 8), foreground="#555555")
         self.detail.grid(row=2, column=0, columnspan=3, sticky="ew",
                          pady=(2, 0))
+        # An error from yt-dlp can be a long sentence. Without this it is cut
+        # off at the edge of the window, which is where the answer usually is.
+        self.bind("<Configure>", self._fit_text)
         self.refresh()
+
+    def _fit_text(self, event):
+        self.detail.configure(wraplength=max(200, event.width - 24))
 
     def refresh(self):
         job = self.job
@@ -98,8 +104,11 @@ class Row(ttk.Frame):
 
         note = right_text(job)
         if job.warnings:
-            note = (note + "   " if note else "") + " | ".join(job.warnings)
-        self.detail.configure(text=note)
+            note = (note + "\n" if note else "") + "\n".join(job.warnings)
+        self.detail.configure(
+            text=note,
+            foreground="#b3261e" if job.status == job_state.FAILED
+            else "#555555")
 
         if job.is_finished:
             if job.status == job_state.DONE and job.path is not None:

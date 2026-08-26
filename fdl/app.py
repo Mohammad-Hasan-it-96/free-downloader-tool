@@ -648,12 +648,17 @@ def download_media(cfg, toolbox, history, url):
                     engine="yt-dlp")
         return True
 
-    print(red("\n[FAILED] yt-dlp reported an error."))
+    print(red("\n[FAILED] yt-dlp reported an error. The reason is in the "
+              "lines above."))
     history.add(url, STATUS_FAILED, category=category, engine="yt-dlp",
                 error=f"yt-dlp exit code {result.returncode}")
     if not cfg.cookies_browser:
-        print(yellow("If YouTube says 'Sign in to confirm you're not a "
-                     "bot', set a cookies browser in Settings."))
+        print(yellow("If it says 'Sign in to confirm you're not a bot', "
+                     "choose a browser for cookies in Settings."))
+    else:
+        print(yellow(f"Cookies are set to {cfg.cookies_browser}. If it says "
+                     "the cookie database cannot be copied, close that "
+                     "browser completely and try again."))
     return False
 
 

@@ -284,6 +284,7 @@ def test_a_video_reports_progress_from_yt_dlp(setup, monkeypatch):
 
 
 def test_a_video_that_fails_explains_the_sign_in_problem(setup, monkeypatch):
+    """With no error line to read, the code is all we have, plus a hint."""
     manager, cfg, _history = setup
     cfg.cookies_browser = ""
     give_prepare(monkeypatch, media_item())
@@ -293,7 +294,8 @@ def test_a_video_that_fails_explains_the_sign_in_problem(setup, monkeypatch):
     job = manager.add("https://youtu.be/abc")
 
     assert job.status == jobs.FAILED
-    assert "cookies browser" in job.error
+    assert "code 1" in job.error
+    assert any("cookies" in note.lower() for note in job.warnings)
 
 
 def test_the_audio_choice_uses_the_audio_folder(setup, monkeypatch):

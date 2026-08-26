@@ -196,6 +196,72 @@ def build_args_quiet(url, out_dir, selector, height, has_ffmpeg, extra=()):
 
 PERCENT = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
 
+# yt-dlp says why it stopped in its output. The exit code is always 1, so
+# "stopped with code 1" tells the user nothing at all. These read the real
+# line, and turn the two most common ones into something a person can act on.
+
+def is_error_line(line):
+    return (line or "").lstrip().upper().startswith("ERROR:")
+
+
+# Words yt-dlp leaves dangling once its links are cut off, as in
+# "... cookie database. See" or "... for the authentication. Use".
+DANGLING = {"see", "use", "and", "or", "for", "more", "info", "at", "from"}
+
+
+def clean_error(line):
+    """The error text, without the prefix, yt-dlp's own flags, and the links.
+
+    The advice yt-dlp prints is about command line flags, which the person
+    looking at a window never types. Ours replaces it, so it goes.
+    """
+    text = " ".join((line or "").split())
+    if text.upper().startswith("ERROR:"):
+        text = text[6:].strip()
+
+    # These come before the link cut. Cutting the link first would leave a
+    # bare "See" behind with nothing after it to match.
+    for tail in ("Use --cookies", "See ", "https://", "http://"):
+        spot = text.find(tail)
+        if spot > 20:
+            text = text[:spot].strip()
+
+    words = text.rstrip(".,: ").split()
+    while words and words[-1].strip(".,:").lower() in DANGLING:
+        words.pop()
+    text = " ".join(words).rstrip(".,: ")
+    return text + "." if text else ""
+
+
+HINTS = (
+    (("sign in to confirm", "not a bot", "confirm your age",
+      "login required", "private video"),
+     "YouTube wants proof that you are a person. In Settings, choose the "
+     "browser where you are signed in to YouTube. Then close that browser "
+     "completely and try again."),
+    (("could not copy", "cookie database", "database is locked",
+      "permission denied while opening cookies"),
+     "The browser is holding its cookie file. Close that browser completely, "
+     "check the system tray for it, and try again."),
+    (("unable to extract", "player response", "please report this issue"),
+     "This site changed. Update yt-dlp: Tools -> Update yt-dlp in the text "
+     "menu, or `pip install -U yt-dlp`."),
+    (("requested format is not available",),
+     "That quality is not offered for this video. Try 'Best available'."),
+    (("ffmpeg", "postprocessing"),
+     "This needs ffmpeg. Install it from Tools -> Install the extra "
+     "programs."),
+)
+
+
+def explain(error_text):
+    """One plain sentence of advice for a yt-dlp error, or ''."""
+    lowered = (error_text or "").lower()
+    for needles, advice in HINTS:
+        if any(needle in lowered for needle in needles):
+            return advice
+    return ""
+
 
 def parse_progress(line):
     """The percent in a yt-dlp progress line, or None for any other line."""
@@ -224,8 +290,11 @@ def run_streaming(args, toolbox, cookies_browser="", on_line=None,
     command += args
 
     start = popen or subprocess.Popen
+    # yt-dlp writes UTF-8. Without saying so, Python uses the computer's own
+    # code page, and any message with a curly quote in it comes out broken.
     process = start(command, stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, text=True, bufsize=1,
+                    stderr=subprocess.STDOUT, bufsize=1,
+                    encoding="utf-8", errors="replace",
                     env=toolbox.env(), creationflags=_no_console_flag())
     try:
         for line in process.stdout:

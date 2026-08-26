@@ -238,11 +238,17 @@ class Manager:
         self._announce(job)
 
         last = [0.0]
+        errors = []
 
         def on_line(line):
             percent = ytdlp_engine.parse_progress(line)
             if percent is not None:
                 job.percent = percent
+            elif ytdlp_engine.is_error_line(line):
+                # The exit code is always 1, so this line is the only place
+                # that ever says what really went wrong.
+                errors.append(ytdlp_engine.clean_error(line))
+                log.error("yt-dlp: %s", errors[-1])
             elif line.strip():
                 job.message = line.strip()[:90]
             now = time.monotonic()
@@ -265,10 +271,14 @@ class Manager:
             self._finish(job, DONE, message=str(job.dest))
             return
 
-        reason = f"yt-dlp stopped with code {code}"
-        if not self.cfg.cookies_browser:
-            reason += (". If the site asks you to sign in, choose a cookies "
-                       "browser in Settings.")
+        reason = errors[-1] if errors else f"yt-dlp stopped with code {code}."
+        advice = ytdlp_engine.explain(" ".join(errors))
+        if advice:
+            job.warnings.append(advice)
+        elif not errors and not self.cfg.cookies_browser:
+            job.warnings.append(
+                "If the site asks you to sign in, choose a browser for "
+                "cookies in Settings.")
         self._record(job, FAILED, reason)
         self._finish(job, FAILED, reason)
 
