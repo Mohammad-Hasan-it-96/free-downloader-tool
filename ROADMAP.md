@@ -143,12 +143,40 @@ This phase is about someone else's computer.
   missing. The default is now `Downloads\FreeDownloader` in the user's own
   folder. A folder already saved in `config.json` is not changed.
 
-**Step 2 — make it reachable** ⬜
+**Step 2 — make it reachable** ✅
 
-- ⬜ A GitHub release that builds the `.exe` on `windows-latest` and attaches
-  it to a tag. Right now `dist/` is ignored by git, so nobody can get it.
-- ⬜ Publish the SHA-256 of the `.exe`, and explain the SmartScreen warning
-  that an unsigned program shows.
+- ✅ A release workflow. Pushing a `v*` tag builds the `.exe` on
+  `windows-latest`, the wheel and the source archive on Ubuntu, and publishes
+  them as a GitHub release. Before this, `dist/` was ignored by git, so nobody
+  could get the tool at all.
+- ✅ `SHA256SUMS.txt` in every release, with instructions to check it.
+- ✅ One place for the version number: `fdl/__init__.py`. `pyproject.toml`
+  reads it from there, so a release cannot ship two different numbers.
+
+**What we learned: the `.exe` is not the main way to install.**
+
+Windows on this machine refused to run a freshly built `.exe`:
+
+```
+An Application Control policy has blocked this file
+```
+
+That is **Smart App Control**. It is on by default on many new Windows 11
+computers, it blocks every unsigned program, and the user cannot click through
+it. SmartScreen can be clicked through; Smart App Control cannot.
+
+| Way to install | Works with Smart App Control on? |
+|---|---|
+| unsigned `.exe` | no |
+| signed `.exe` (needs a paid certificate) | yes |
+| wheel, through `pip` | yes |
+
+So the wheel is the main way, and the `.exe` is for people with no Python.
+The README and the release notes now say this plainly. A signing certificate
+is the only thing that would change it, and it costs money every year.
+
+- ⬜ Publish the wheel to PyPI, so `pip install free-downloader-tool` works
+  without downloading a file first. This needs a PyPI account and a token.
 
 **Step 3 — make it friendly** ⬜
 
@@ -186,7 +214,7 @@ These are useful, but they are not needed for a good tool. They go last.
 6. ✅ Phase 6 — convenience.
 7. ✅ Phase 7 — packaging and quality.
 
-8. 🔄 Phase 8 — ready for other people. Step 1 is done. Steps 2 and 3 are
+8. 🔄 Phase 8 — ready for other people. Steps 1 and 2 are done. Step 3 is
    still open.
 
 Phases 0 to 7 are done. Phase 8 is what turns this from "my tool" into a tool

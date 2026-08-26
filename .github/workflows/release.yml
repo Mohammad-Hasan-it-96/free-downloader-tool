@@ -1,0 +1,110 @@
+name: release
+
+# Make a release by pushing a tag:
+#     git tag v2.1.0
+#     git push origin v2.1.0
+#
+# Running this by hand builds the files and keeps them as artifacts, but does
+# not publish a release. Only a tag does that.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    name: Build the Windows .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the package and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[build]"
+
+      - name: Build
+        run: python build_exe.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/FreeDownloader.exe
+          if-no-files-found: error
+
+  python-package:
+    name: Build the wheel and the source archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: [windows-exe, python-package]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      - name: Put every file in one folder
+        run: |
+          mkdir -p files
+          find downloaded -type f -exec mv {} files/ \;
+          ls -l files
+
+      - name: Write the checksums
+        working-directory: files
+        run: |
+          sha256sum FreeDownloader.exe *.whl *.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Write the release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed "s/__VERSION__/$version/g" .github/release-notes.md > notes.md
+          {
+            echo
+            echo '### Checksums (SHA-256)'
+            echo
+            echo '```'
+            cat files/SHA256SUMS.txt
+            echo '```'
+          } >> notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" files/* \
+            --title "Free Downloader Tool $GITHUB_REF_NAME" \
+            --notes-file notes.md

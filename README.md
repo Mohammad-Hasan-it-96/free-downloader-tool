@@ -1,6 +1,7 @@
 # Free Downloader Tool
 
 [![tests](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/actions/workflows/tests.yml/badge.svg)](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/actions/workflows/tests.yml)
+[![latest release](https://img.shields.io/github/v/release/Mohammad-Hasan-it-96/free-downloader-tool?label=download)](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/releases/latest)
 
 A download manager for the terminal.
 
@@ -101,12 +102,40 @@ missing, the app tells you at startup and offers to install it.
 `aria2c` is optional. Without it the built-in multi-connection downloader is
 used, which is already much faster than one connection.
 
+## How to install
+
+Pick the first line in this table that fits you.
+
+| You have | Do this | Notes |
+|---|---|---|
+| Python 3.9 or newer | download the `.whl` from [Releases](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/releases) and `pip install` it | best way, easy to update |
+| no Python | download `FreeDownloader.exe` from [Releases](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/releases) | read the warning below |
+| the source folder | double-click **`Download Video.bat`** | needs Python on the computer |
+
+Every release also has a `SHA256SUMS.txt`, so you can check that a file is
+really the one that was built. On Windows:
+
+```
+certutil -hashfile FreeDownloader.exe SHA256
+```
+
+### Windows may block the .exe
+
+The `.exe` is not signed with a paid certificate, so Windows does not know it
+yet.
+
+| Message | What to do |
+|---|---|
+| "Windows protected your PC" (SmartScreen) | Click **More info**, then **Run anyway** |
+| "An Application Control policy has blocked this file" (Smart App Control) | This cannot be clicked away. Use Python and the `.whl` instead |
+
+Smart App Control is **on by default on many new Windows 11 computers**. It
+blocks every unsigned program. This is a limit of the `.exe`, not a bug in the
+tool, and the Python way always works.
+
 ## How to run
 
-There are three ways.
-
-**1. Portable, no install.** Download the folder and double-click
-**`Download Video.bat`**, or run:
+**1. Portable, no install.** Double-click **`Download Video.bat`**, or run:
 
 ```bash
 python -m fdl
@@ -135,10 +164,11 @@ keeps its settings in the normal user folder, never inside Python:
 
 Set `FDL_HOME` to put them anywhere else.
 
-**3. One `.exe`, for a computer with no Python.**
+**3. Build the `.exe` yourself.** Releases carry a ready-made one, so this is
+only needed if you changed the code.
 
 ```bash
-pip install pyinstaller
+pip install ".[build]"
 python build_exe.py
 ```
 

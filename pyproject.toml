@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "free-downloader-tool"
-version = "2.0.0"
+dynamic = ["version"]          # taken from fdl/__init__.py
 description = "A download manager for the terminal: media sites and direct links, with resume, a queue, and sorting by file type."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -47,6 +47,9 @@ free-downloader = "fdl.app:run"
 
 [tool.setuptools]
 packages = ["fdl"]
+
+[tool.setuptools.dynamic]
+version = { attr = "fdl.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

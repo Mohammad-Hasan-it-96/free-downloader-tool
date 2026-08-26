@@ -18,6 +18,27 @@ Tests write settings to `FDL_HOME` in CI. Set it locally too if you do not want
 the suite to touch `config.json` in the repo:
 `FDL_HOME=/tmp/fdl python -m pytest`.
 
+## Making a release
+
+The version lives in **one** place, `fdl/__init__.py`. `pyproject.toml` reads
+it from there (`dynamic = ["version"]`), so the two can never disagree.
+
+```bash
+# 1. bump __version__ in fdl/__init__.py, commit
+git tag v2.1.0 && git push origin v2.1.0
+```
+
+The tag runs `.github/workflows/release.yml`: it builds the `.exe` on
+`windows-latest`, the wheel and sdist on Ubuntu, writes `SHA256SUMS.txt`, and
+publishes a GitHub release. The body comes from `.github/release-notes.md`,
+with `__VERSION__` replaced and the checksums appended. Running the workflow
+by hand builds the files but publishes nothing — only a `v*` tag does that.
+
+The `.exe` is unsigned. **Smart App Control**, which is on by default on many
+new Windows 11 machines, refuses to run it, and that cannot be clicked away.
+The wheel is therefore the main way to install, not a fallback. Do not write
+docs that treat the `.exe` as the normal route.
+
 ## Architecture
 
 The app is a terminal menu (`fdl/app.py`) over **two download engines**. Almost
