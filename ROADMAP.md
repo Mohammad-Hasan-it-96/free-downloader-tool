@@ -1,13 +1,13 @@
 # Roadmap — Free Downloader Tool
 
 Goal: grow the tool from a **video downloader** into a **general download
-manager** for the terminal.
+manager**, easy enough for someone who has never opened a terminal.
 
-Three decisions are fixed:
+The fixed decisions:
 
 | Decision | Choice |
 |---|---|
-| Interface | Terminal menu only. Code is split so a GUI can be added later. |
+| Interface | A window (tkinter) for everyday use, and the terminal menu for the rest. The window came in Phase 9; the split into small modules is what made that a front end and not a rewrite. |
 | Engine for direct links | Pure Python (works everywhere), and `aria2c` when it is installed, for speed. |
 | Code layout | A Python package of small modules, not one big file. |
 
@@ -199,6 +199,48 @@ is the only thing that would change it, and it costs money every year.
   through `sys.executable`, which in a frozen build opened another copy of the
   menu. The same trap as the yt-dlp call in step 1.
 
+## Phase 9 — a window ✅
+
+The terminal menu is fine for people who live in a terminal. Everyone else
+wants to paste a link and press a button. This phase was a **new front end,
+not a rewrite**: every engine, the router, the settings, and the safety
+checks are the same code the menu uses.
+
+Three choices were made before any code:
+
+| Question | Choice | Why |
+|---|---|---|
+| Toolkit | **tkinter** | Comes with Python, so nothing extra to install and the `.exe` stays about 25 MB. Qt would have added roughly 60 MB. |
+| How much | **One window first** | Paste, watch, change the folder, open Settings. That is what a first-time user needs. |
+| What opens | **Window on double-click** | The `.bat` and the `.exe` open the window. Typing `fdl` in a terminal still opens the menu. |
+
+- ✅ One window: paste a link, add it, watch a bar per download, stop one,
+  open a finished file.
+- ✅ The same routing as the menu, so a video page still goes to yt-dlp and a
+  file link still goes to the fast downloader, with no question asked.
+- ✅ yt-dlp progress is read from its own output and shown as a real bar. The
+  child window is hidden, so nothing black flashes up.
+- ✅ A Settings window for the folder, sorting, speed, aria2c, cookies, what
+  happens when a download finishes, and the update check.
+- ✅ The safety checks still run: a login page and a full disk stop the
+  download before anything is saved.
+- ✅ The console is hidden while the window is open, and shown again if the
+  window falls over, because then the text is the only clue the user has.
+- ✅ `fdl-gui` is a **gui-script**, so pip installs a launcher with no console.
+
+**Rules this front end must keep**
+
+- No widget outside the window thread. `fdl/gui/jobs.py` imports no tkinter
+  at all; it puts job numbers in a queue and the window empties it on a timer.
+- No question a window cannot answer. The terminal builders print and ask;
+  the GUI uses `build_args_quiet` and `playlist_flags`, which never do.
+
+**Still terminal only**
+
+The queue from a `.txt` file, the history screen, the clipboard watch,
+checksums, a proxy, extra headers, and a folder for each type. These are
+tabs for a later version.
+
 ## Maybe later
 
 These are useful, but they are not needed for a good tool. They go last.
@@ -210,7 +252,8 @@ These are useful, but they are not needed for a good tool. They go last.
 
 ## Not planned
 
-- No GUI for now (the code stays ready for one).
+- ~~No GUI for now~~ - done in Phase 9. The split into small modules is
+  what made it a front end instead of a rewrite.
 - No account system, no cloud sync.
 - No downloading of DRM-protected content.
 
@@ -227,6 +270,8 @@ These are useful, but they are not needed for a good tool. They go last.
 7. ✅ Phase 7 — packaging and quality.
 
 8. ✅ Phase 8 — ready for other people.
+9. ✅ Phase 9 — a window.
 
-All planned phases are done. The only thing left in Phase 8 is publishing
-to PyPI, which needs an account and a token.
+All planned phases are done. What is left is publishing (a release tag,
+and PyPI, which needs an account and a token) and the tabs listed under
+Phase 9.

@@ -1,0 +1,395 @@
+"""Tests for the work behind the window.
+
+`fdl.gui.jobs` holds no widgets on purpose, so all of it can be tested with
+no screen at all. The pool is replaced by one that runs the work right away,
+which makes every test straight-line code instead of a race.
+"""
+
+import threading
+
+import pytest
+
+from fdl.gui import jobs
+from fdl.batch import Item
+from fdl.config import Config
+from fdl.http_engine import DownloadError
+from fdl.router import KIND_FILE, KIND_MEDIA
+
+
+class NowPool:
+    """A thread pool that is not a pool: it runs the work immediately."""
+
+    def submit(self, function, *args, **kwargs):
+        function(*args, **kwargs)
+
+    def shutdown(self, wait=True):
+        pass
+
+
+class FakeToolbox:
+    ffmpeg_dir = None
+    deno_dir = None
+    aria2c_dir = None
+    has_ffmpeg = True
+
+    def env(self):
+        return {}
+
+
+class FakeHistory:
+    def __init__(self):
+        self.rows = []
+
+    def add(self, url, status, **kwargs):
+        self.rows.append((url, status, kwargs))
+
+    def already_have(self, _url):
+        return None
+
+
+class FakeInfo:
+    def __init__(self, size=1000, content_type="application/zip",
+                 filename="thing.zip"):
+        self.size = size
+        self.content_type = content_type
+        self.filename = filename
+
+
+@pytest.fixture
+def setup(tmp_path):
+    cfg = Config(tmp_path / "config.json")
+    cfg.base_dir = str(tmp_path / "dl")
+    history = FakeHistory()
+    manager = jobs.Manager(cfg, FakeToolbox(), history, pool=NowPool())
+    return manager, cfg, history
+
+
+def file_item(tmp_path, **changes):
+    item = Item(url="https://example.com/thing.zip", kind=KIND_FILE)
+    item.info = FakeInfo()
+    item.name = "thing.zip"
+    item.category = "Archives"
+    item.dest = tmp_path / "dl" / "Archives"
+    for key, value in changes.items():
+        setattr(item, key, value)
+    return item
+
+
+def give_prepare(monkeypatch, item):
+    monkeypatch.setattr(jobs.batch, "prepare",
+                        lambda urls, cfg, history=None, **kw: [item])
+
+
+def events_of(manager):
+    seen = []
+    while not manager.events.empty():
+        seen.append(manager.events.get_nowait())
+    return seen
+
+
+# ------------------------------ a direct file ---------------------------- #
+
+def test_a_file_download_finishes(setup, monkeypatch, tmp_path):
+    manager, _cfg, history = setup
+    saved = tmp_path / "dl" / "Archives" / "thing.zip"
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: saved)
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.DONE
+    assert job.path == saved
+    assert job.percent == 100.0
+    assert job.category == "Archives"
+    assert history.rows[0][1] == "done"
+
+
+def test_the_window_is_told_about_every_change(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: tmp_path / "thing.zip")
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert events_of(manager).count(job.job_id) >= 2
+
+
+def test_a_download_error_is_shown_not_raised(setup, monkeypatch, tmp_path):
+    manager, _cfg, history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+
+    def boom(*_a, **_kw):
+        raise DownloadError("The file was not found (404).")
+
+    monkeypatch.setattr(jobs.http_engine, "download", boom)
+
+    job = manager.add("https://example.com/gone.zip")
+
+    assert job.status == jobs.FAILED
+    assert "404" in job.error
+    assert history.rows[0][1] == "failed"
+
+
+def test_a_link_that_cannot_be_checked_fails_early(setup, monkeypatch,
+                                                   tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path, status="failed",
+                                        error="No such host"))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: pytest.fail("must not download"))
+
+    job = manager.add("https://nowhere.invalid/x.zip")
+
+    assert job.status == jobs.FAILED
+    assert job.error == "No such host"
+
+
+def test_a_link_already_downloaded_is_skipped(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path, status="skipped",
+                                        note="already downloaded to D:/x.zip"))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: pytest.fail("must not download"))
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.SKIPPED
+    assert "already downloaded" in job.message
+
+
+def test_a_login_page_is_refused_before_saving(setup, monkeypatch, tmp_path):
+    """Otherwise the window would save an HTML page called thing.zip."""
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.safety, "looks_like_a_login_page",
+                        lambda _info: True)
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: pytest.fail("must not download"))
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.FAILED
+    assert "web page" in job.error
+
+
+def test_no_room_on_the_disk_stops_the_download(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.safety, "check_space",
+                        lambda _dir, _need: (False, "Not enough free space."))
+    monkeypatch.setattr(jobs.http_engine, "download",
+                        lambda *a, **kw: pytest.fail("must not download"))
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.FAILED
+    assert "free space" in job.error
+
+
+# -------------------------------- stopping ------------------------------- #
+
+def test_stopping_marks_the_job_cancelled(setup, monkeypatch, tmp_path):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+
+    def download(*_a, **kwargs):
+        kwargs["on_progress"](10, 1000)      # the window pressed Stop
+        pytest.fail("the download should have been stopped")
+
+    monkeypatch.setattr(jobs.http_engine, "download", download)
+
+    job = jobs.Job(job_id=1, url="https://example.com/thing.zip")
+    job.stop.set()
+    manager.jobs[1] = job
+    manager._run(job, "1", False)
+
+    assert job.status == jobs.CANCELLED
+
+
+def test_a_job_stopped_while_running_ends_as_cancelled(setup, monkeypatch,
+                                                       tmp_path):
+    manager, _cfg, history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+
+    def download(*_a, **kwargs):
+        job = manager.jobs[1]
+        job.stop.set()
+        kwargs["on_progress"](10, 1000)      # this must raise
+        pytest.fail("on_progress did not stop the download")
+
+    monkeypatch.setattr(jobs.http_engine, "download", download)
+    manager._ids = iter([1])
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.CANCELLED
+    assert history.rows[0][1] == "failed"
+
+
+def test_cancel_before_the_work_starts(setup):
+    manager, _cfg, _history = setup
+    job = jobs.Job(job_id=7, url="https://example.com/a.zip")
+    manager.jobs[7] = job
+
+    manager.cancel(7)
+
+    assert job.stop.is_set()
+
+
+def test_cancel_does_nothing_to_a_finished_job(setup):
+    manager, _cfg, _history = setup
+    job = jobs.Job(job_id=7, status=jobs.DONE)
+    manager.jobs[7] = job
+
+    manager.cancel(7)
+
+    assert job.stop.is_set() is False
+
+
+# ------------------------------- a media page ---------------------------- #
+
+def media_item():
+    item = Item(url="https://youtu.be/abc", kind=KIND_MEDIA)
+    item.info = None
+    item.category = "Videos"
+    return item
+
+
+def test_a_video_reports_progress_from_yt_dlp(setup, monkeypatch):
+    manager, _cfg, history = setup
+    give_prepare(monkeypatch, media_item())
+    lines = [
+        "[youtube] abc: Downloading webpage",
+        "[download] Destination: video.mp4",
+        "[download]   5.0% of 10.00MiB at 1.00MiB/s ETA 00:09",
+        "[download]  75.5% of 10.00MiB at 1.00MiB/s ETA 00:02",
+        "[download] 100% of 10.00MiB",
+    ]
+
+    def fake_stream(args, toolbox, cookies, on_line=None, stop_event=None):
+        for line in lines:
+            on_line(line)
+        return 0
+
+    monkeypatch.setattr(jobs.ytdlp_engine, "run_streaming", fake_stream)
+
+    job = manager.add("https://youtu.be/abc", quality="1")
+
+    assert job.status == jobs.DONE
+    assert job.percent == 100.0
+    assert job.category == "Videos"
+    assert history.rows[0][2]["engine"] == "yt-dlp"
+
+
+def test_a_video_that_fails_explains_the_sign_in_problem(setup, monkeypatch):
+    manager, cfg, _history = setup
+    cfg.cookies_browser = ""
+    give_prepare(monkeypatch, media_item())
+    monkeypatch.setattr(jobs.ytdlp_engine, "run_streaming",
+                        lambda *a, **kw: 1)
+
+    job = manager.add("https://youtu.be/abc")
+
+    assert job.status == jobs.FAILED
+    assert "cookies browser" in job.error
+
+
+def test_the_audio_choice_uses_the_audio_folder(setup, monkeypatch):
+    manager, _cfg, _history = setup
+    give_prepare(monkeypatch, media_item())
+    monkeypatch.setattr(jobs.ytdlp_engine, "run_streaming",
+                        lambda *a, **kw: 0)
+
+    job = manager.add("https://youtu.be/abc", quality="6")   # Audio only
+
+    assert job.category == "Audio"
+
+
+def test_a_missing_ffmpeg_is_explained_not_hidden(setup, monkeypatch):
+    manager, _cfg, _history = setup
+    manager.toolbox.has_ffmpeg = False
+    give_prepare(monkeypatch, media_item())
+    monkeypatch.setattr(jobs.ytdlp_engine, "run_streaming",
+                        lambda *a, **kw: 0)
+
+    job = manager.add("https://youtu.be/abc", quality="6")
+
+    assert any("ffmpeg" in note for note in job.warnings)
+
+
+# ------------------------------ never get stuck -------------------------- #
+
+def test_an_unexpected_crash_still_ends_the_row(setup, monkeypatch):
+    manager, _cfg, _history = setup
+
+    def explode(*_a, **_kw):
+        raise ZeroDivisionError("something nobody thought of")
+
+    monkeypatch.setattr(jobs.batch, "prepare", explode)
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.FAILED
+    assert job.is_finished
+    assert "nobody thought of" in job.error
+
+
+# -------------------------------- the maths ------------------------------ #
+
+def test_percent_and_speed():
+    job = jobs.Job()
+    clock = iter([0.0, 2.0, 2.0])
+    ticker = jobs._Ticker(job, now=lambda: next(clock))
+    ticker.update(500, 1000)
+    assert job.percent == 50.0
+    assert job.speed == 250.0
+
+
+def test_percent_stays_inside_the_bar():
+    job = jobs.Job()
+    ticker = jobs._Ticker(job, now=lambda: 0.0)
+    ticker.update(2000, 1000)
+    assert job.percent == 100.0
+
+
+def test_an_unknown_size_gives_no_percent():
+    job = jobs.Job()
+    ticker = jobs._Ticker(job, now=lambda: 0.0)
+    ticker.update(500, None)
+    assert job.percent == 0.0
+    assert job.done_bytes == 500
+
+
+def test_news_is_not_sent_on_every_single_chunk():
+    """A 4 GB file would otherwise send tens of thousands of redraws."""
+    job = jobs.Job()
+    times = iter([0.0, 0.0, 0.01, 1.0])
+    ticker = jobs._Ticker(job, now=lambda: next(times))
+    assert ticker.due() is True       # the first one always goes
+    assert ticker.due() is False      # 10 ms later: too soon
+    assert ticker.due() is True       # a second later: fine
+
+
+def test_a_job_knows_when_it_can_be_stopped():
+    assert jobs.Job(status=jobs.RUNNING).can_cancel is True
+    assert jobs.Job(status=jobs.CHECKING).can_cancel is True
+    assert jobs.Job(status=jobs.DONE).can_cancel is False
+    assert jobs.Job(status=jobs.FAILED).is_finished is True
+
+
+def test_the_label_falls_back_to_the_link():
+    assert jobs.Job(url="https://x/y.zip").label == "https://x/y.zip"
+    assert jobs.Job(url="https://x/y.zip", name="y.zip").label == "y.zip"
+
+
+def test_closing_stops_everything(setup):
+    manager, _cfg, _history = setup
+    job = jobs.Job(job_id=1, status=jobs.RUNNING,
+                   stop=threading.Event())
+    manager.jobs[1] = job
+
+    manager.close()
+
+    assert job.stop.is_set()

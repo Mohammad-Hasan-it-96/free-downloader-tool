@@ -9,7 +9,8 @@ pip install -e ".[dev]"        # install the package plus pytest
 python -m pytest               # run all tests (no internet needed)
 python -m pytest -q tests/test_http_engine.py            # one file
 python -m pytest tests/test_router.py::test_a_zip_wins   # one test
-python -m fdl                  # run the app from a checkout
+python -m fdl                  # the terminal menu
+python -m fdl --gui            # the window
 python build_exe.py            # build dist/FreeDownloader.exe (needs pyinstaller)
 python build_exe.py clean      # remove build/ and dist/
 ```
@@ -41,8 +42,9 @@ docs that treat the `.exe` as the normal route.
 
 ## Architecture
 
-The app is a terminal menu (`fdl/app.py`) over **two download engines**. Almost
-every design decision follows from keeping those two engines apart.
+The app is **two front ends** - a terminal menu (`fdl/app.py`) and a window
+(`fdl/gui/`) - over **two download engines**. Almost every design decision
+follows from keeping those two engines apart.
 
 ### The two engines and the router
 
@@ -107,6 +109,8 @@ The same code must behave in two ways:
   `fdl/__main__.py`.
 - `fdl/__main__.py` — for `python -m fdl`.
 - `fdl.app:run` — the `fdl` and `free-downloader` console scripts.
+- `fdl.app:run_gui` — the `fdl-gui` **gui-script**, so pip gives Windows a
+  launcher with no console window.
 
 ### Config (`config.py`)
 
@@ -116,6 +120,45 @@ migrated on load, and `take_notice()` shows the user once what changed.
 `folder_for(category)` returns the base folder when sorting is off, a subfolder
 for a plain name, and the path as written when it is absolute (so one category
 can live on another drive).
+
+### The window (`fdl/gui/`)
+
+The GUI is a **second front end over the same engines**, not a second app.
+`app.py` (menu) and `fdl/gui/` (window) both call `router`, `batch`,
+`http_engine`, and `ytdlp_engine`. Put shared behaviour in those, never in
+one front end.
+
+`app.run()` decides which one opens: a `--gui` / `--terminal` flag wins,
+otherwise a frozen build opens the window and a plain Python run opens the
+menu. The yt-dlp passthrough is still checked first.
+
+Three rules hold this together:
+
+1. **No widget outside the window thread.** `fdl/gui/jobs.py` imports no
+   tkinter at all. Workers put job ids into `Manager.events`, and
+   `MainWindow._drain()` empties that queue every 120 ms. Anything that
+   touches a widget from a worker will crash in ways that look random.
+2. **No question a window cannot answer.** The terminal builders in
+   `ytdlp_engine` print and call `input()`. The GUI uses `build_args_quiet`
+   and `playlist_flags`, which return a note instead of asking. If you add a
+   yt-dlp flag, change both, and `test_gui_engine.py` will hold you to it.
+3. **A worker must never die quietly**, or its row spins for ever.
+   `Manager._guarded` catches everything and ends the job as failed.
+
+Other things worth knowing:
+
+- `run_streaming` needs `--newline`, or yt-dlp rewrites one line and no
+  progress is ever parsed. It also passes `CREATE_NO_WINDOW`, so no black
+  box flashes up.
+- `PrintWindow` (used when photographing the window for a check) is a
+  synchronous message: the Tk loop must keep running while it happens, or
+  the two deadlock.
+- `console.hide()` hides the console while the window is open and
+  `console.show()` brings it back if the GUI raises, because then the
+  traceback is the user's only clue. The `.exe` is still built `--console`
+  on purpose: the terminal menu and the yt-dlp passthrough both need one.
+- `fdl.gui` must stay in `pyproject.toml`'s `packages`, or pip installs ship
+  a broken window.
 
 ### Reaching a normal user
 

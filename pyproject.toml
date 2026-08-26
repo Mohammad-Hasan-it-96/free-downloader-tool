@@ -45,8 +45,13 @@ Issues = "https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/issues"
 fdl = "fdl.app:run"
 free-downloader = "fdl.app:run"
 
+# A gui-script gets a launcher with no console window on Windows, which is
+# what you want when the whole point is a window.
+[project.gui-scripts]
+fdl-gui = "fdl.app:run_gui"
+
 [tool.setuptools]
-packages = ["fdl"]
+packages = ["fdl", "fdl.gui"]
 
 [tool.setuptools.dynamic]
 version = { attr = "fdl.__version__" }

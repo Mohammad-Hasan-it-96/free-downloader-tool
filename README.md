@@ -3,7 +3,8 @@
 [![tests](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/actions/workflows/tests.yml/badge.svg)](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/actions/workflows/tests.yml)
 [![latest release](https://img.shields.io/github/v/release/Mohammad-Hasan-it-96/free-downloader-tool?label=download)](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/releases/latest)
 
-A download manager for the terminal.
+A download manager for Windows, macOS, and Linux. It has a **window** for
+everyday use and a **terminal menu** for everything else.
 
 Paste any link. The tool works out what it is:
 
@@ -32,6 +33,49 @@ Cookies from : off
   7. Tools
   0. Exit
 ```
+
+## The window
+
+Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
+
+```
++----------------------------------------------------------------+
+|  Paste a link:                                                 |
+|  [                                        ]  [Paste]  [Add]    |
+|  Video quality: [ Best available            v ]  [ ] whole     |
+|  Saving to: C:\Users\me\Downloads\FreeDownloader   [Change...] |
++----------------------------------------------------------------+
+|  python-3.12.0-embed-amd64.zip                    54%   [Stop] |
+|  [##############################              ]                |
+|  5.7 MB of 10.5 MB   104.3 KB/s                                |
+|                                                                |
+|  README.rst                                      done   [Open] |
+|  [##############################################]              |
+|  C:\Users\me\Downloads\FreeDownloader\Documents\README.rst     |
+|                                                                |
+|  https://example.com/this-one-does-not-exist.zip     failed    |
+|  The file was not found (404).                                 |
++----------------------------------------------------------------+
+|  [Settings]   1 in progress, 1 done, 1 failed    [Open folder] |
++----------------------------------------------------------------+
+```
+
+- Paste a link and press **Add**. Several downloads run at once, each with
+  its own bar.
+- The tool still decides the engine by itself. **Video quality** and **whole
+  playlist** are only used when the link turns out to be a video or audio
+  page.
+- **Stop** keeps the part of the file already downloaded, so it can continue
+  later. **Open** shows the finished file in Explorer.
+- **Settings** covers the folder, sorting, speed, cookies, and updates.
+
+The window needs no extra install: it uses tkinter, which comes with Python
+on Windows and macOS. On Linux install `python3-tk` first. If the window
+cannot open, the tool says so and falls back to the text menu.
+
+**Still only in the text menu:** the queue from a `.txt` file, the history
+screen, the clipboard watch, checksums, a proxy, extra headers, and a folder
+for each type. Use `Free Downloader (terminal).bat` or `fdl` for those.
 
 ## Main features
 
@@ -150,12 +194,13 @@ tool, and the Python way always works.
 
 ## How to run
 
-**1. Portable, no install.** Double-click **`Free Downloader.bat`**, or run:
+**1. Portable, no install.** Double-click **`Free Downloader.bat`** to get
+the window. For the text menu, double-click
+**`Free Downloader (terminal).bat`**, or run:
 
 ```bash
-python -m fdl
-# or
-python video_downloader.py
+python -m fdl              # the text menu
+python -m fdl --gui        # the window
 ```
 
 Settings stay next to the app, so the whole folder can be copied to a USB
@@ -168,7 +213,8 @@ pip install .
 fdl
 ```
 
-This gives you an `fdl` command that works from any folder. An installed copy
+This gives you an `fdl` command (the text menu) and an `fdl-gui` command
+(the window), both working from any folder. An installed copy
 keeps its settings in the normal user folder, never inside Python:
 
 | System | Where the settings go |

@@ -1257,12 +1257,68 @@ def main():
             pause()
 
 
+MODE_GUI = "gui"
+MODE_TERMINAL = "terminal"
+
+GUI_FLAGS = ("--gui", "-g")
+TERMINAL_FLAGS = ("--terminal", "--cli", "-t")
+
+
+def choose_mode(argv, frozen=False):
+    """Window or menu?
+
+    A flag always wins. With no flag, a frozen build opens the window,
+    because someone double-clicked an icon and expects one. A plain Python
+    run opens the menu, because the person is already in a terminal.
+    """
+    for arg in argv:
+        if arg in GUI_FLAGS:
+            return MODE_GUI
+        if arg in TERMINAL_FLAGS:
+            return MODE_TERMINAL
+    return MODE_GUI if frozen else MODE_TERMINAL
+
+
+def start_gui():
+    """Open the window. Returns None when no window can be opened."""
+    from . import gui                    # imports tkinter, so not at the top
+
+    if not gui.available():
+        print(red("\n" + gui.why_not()))
+        print(yellow("Opening the terminal menu instead.\n"))
+        return None
+
+    first_run = not CONFIG_PATH.exists()
+    cfg = Config.load(CONFIG_PATH)
+    log.setup(LOG_PATH)
+    log.info("gui started, base folder %s", cfg.base_dir)
+    log.info("proxy: %s", http_engine.configure_proxy(cfg.proxy))
+    if first_run:
+        cfg.save()
+    cfg.take_notice()                    # the window has its own welcome
+    return gui.run(cfg=cfg, ensure_folder=ensure_folder, first_run=first_run)
+
+
+def run_gui():
+    """The `fdl-gui` command: the same app, opened as a window."""
+    if not any(arg in GUI_FLAGS for arg in sys.argv[1:]):
+        sys.argv.insert(1, "--gui")
+    run()
+
+
 def run():
     # Inside the single .exe, yt-dlp is started by running this same .exe
     # again. That call must reach yt-dlp, not the menu. See ytdlp_engine.
     passthrough = ytdlp_engine.wants_passthrough(sys.argv[1:])
     if passthrough is not None:
         sys.exit(ytdlp_engine.run_passthrough(passthrough))
+
+    if choose_mode(sys.argv[1:], is_frozen()) == MODE_GUI:
+        code = start_gui()
+        if code is not None:
+            sys.exit(code)
+        # No window on this computer, so carry on with the menu.
+
     try:
         main()
     except KeyboardInterrupt:

@@ -21,8 +21,14 @@ if not defined PY (
 
 if not defined PY goto no_python
 
-%PY% "video_downloader.py" %*
-pause
+REM Double-clicking this file opens the window. Add --terminal to get the
+REM old text menu instead:  "Free Downloader.bat" --terminal
+if "%~1"=="" (
+    %PY% "video_downloader.py" --gui
+) else (
+    %PY% "video_downloader.py" %*
+)
+if errorlevel 1 pause
 exit /b
 
 :no_python

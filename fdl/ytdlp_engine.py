@@ -1,6 +1,7 @@
 """Download from YouTube and other media sites, using yt-dlp."""
 
 import os
+import re
 import subprocess
 import sys
 
@@ -148,6 +149,94 @@ def build_args(url, out_dir, selector, height, has_ffmpeg, extra=()):
     print(yellow("Using the best single file instead. Quality may be lower."))
     print(yellow("For full quality:  winget install Gyan.FFmpeg"))
     return common + ["-f", single_file_selector(height), url]
+
+
+# ------------------------------ for the GUI ------------------------------ #
+#
+# The functions above print and ask questions, which only works in a
+# terminal. The GUI needs the same decisions with no questions at all, so it
+# gets its own small set here. Both go through the same builders, so a change
+# to the yt-dlp flags is made in one place.
+
+def playlist_flags(whole_playlist):
+    """The playlist flag, decided by a tick box instead of a question."""
+    return ["--yes-playlist"] if whole_playlist else ["--no-playlist"]
+
+
+def has_playlist(url):
+    return "list=" in url
+
+
+def build_args_quiet(url, out_dir, selector, height, has_ffmpeg, extra=()):
+    """Like `build_args`, but it never prints and never asks.
+
+    Returns `(args, note)`. `note` is a short line for the GUI to show when
+    the result is not what the user picked, or '' when all is well.
+    """
+    out_template = os.path.join(str(out_dir), "%(title)s [%(id)s].%(ext)s")
+    common = ["-o", out_template, "--no-mtime", "--restrict-filenames",
+              "--continue", "--progress", "--newline"] + list(extra)
+
+    if selector == "AUDIO_MP3":
+        if has_ffmpeg:
+            return common + ["-x", "--audio-format", "mp3",
+                             "--audio-quality", "0", url], ""
+        return (common + ["-f", "bestaudio", url],
+                "ffmpeg is missing, so the audio is saved as it comes, "
+                "not as MP3.")
+
+    if has_ffmpeg:
+        return common + ["-f", selector, "--merge-output-format", "mp4",
+                         url], ""
+
+    return (common + ["-f", single_file_selector(height), url],
+            "ffmpeg is missing, so the best single file is used. The "
+            "quality may be lower.")
+
+
+PERCENT = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
+
+
+def parse_progress(line):
+    """The percent in a yt-dlp progress line, or None for any other line."""
+    match = PERCENT.search(line or "")
+    if not match:
+        return None
+    return max(0.0, min(100.0, float(match.group(1))))
+
+
+def _no_console_flag():
+    """Stop a black window flashing up when the GUI starts yt-dlp."""
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def run_streaming(args, toolbox, cookies_browser="", on_line=None,
+                  stop_event=None, popen=None):
+    """Run yt-dlp and pass every output line to `on_line`.
+
+    Returns the exit code. `stop_event` cancels the download.
+    """
+    command = [sys.executable, "-m", "yt_dlp"]
+    if toolbox.ffmpeg_dir:
+        command += ["--ffmpeg-location", toolbox.ffmpeg_dir]
+    if cookies_browser:
+        command += ["--cookies-from-browser", cookies_browser]
+    command += args
+
+    start = popen or subprocess.Popen
+    process = start(command, stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, text=True, bufsize=1,
+                    env=toolbox.env(), creationflags=_no_console_flag())
+    try:
+        for line in process.stdout:
+            if on_line:
+                on_line(line.rstrip())
+            if stop_event is not None and stop_event.is_set():
+                process.terminate()
+                return 1
+    finally:
+        process.stdout.close()
+    return process.wait()
 
 
 def looks_like_media_site(url):
