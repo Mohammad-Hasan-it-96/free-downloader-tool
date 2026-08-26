@@ -117,6 +117,25 @@ migrated on load, and `take_notice()` shows the user once what changed.
 for a plain name, and the path as written when it is absolute (so one category
 can live on another drive).
 
+### Reaching a normal user
+
+Four pieces exist only because the tool has to work on somebody else's
+computer, and each one has a trap behind it:
+
+- `Free Downloader.bat` tries `py -3`, `py`, `python`, `python3` in that
+  order. `py` comes first because plain `python` on a clean Windows 11 is a
+  Microsoft Store stub. `Download Video.bat` now just forwards to it, so old
+  shortcuts keep working — keep it that way.
+- `installer.py` runs `winget install` for ffmpeg / deno / aria2c. `--exact`
+  and both `--accept-*` flags are required, or winget picks a different
+  package or waits for an answer nobody sees.
+- `updates.py` asks GitHub once a day, in a daemon thread, and writes the
+  date **before** the network call so a hanging server cannot make it retry on
+  every start. Every failure path returns "no news" — nothing here may raise.
+- `app.welcome()` is the first-run screen, shown when `config.json` does not
+  exist yet. `as_full_path()` is what stops a bare answer like `Movies` from
+  becoming a folder relative to whatever directory the app started in.
+
 ### Other modules
 
 `batch.py` is the queue: it probes every link first, builds a plan, then runs

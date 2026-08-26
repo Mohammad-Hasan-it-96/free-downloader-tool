@@ -38,6 +38,8 @@ def defaults():
         "proxy": "",
         "headers": {},
         "after_download": "nothing",
+        "check_updates": True,
+        "last_update_check": "",
         "notice": "",
     }
 
@@ -188,6 +190,23 @@ class Config:
         if value in AFTER_DOWNLOAD_CHOICES:
             self.data["after_download"] = value
 
+    @property
+    def check_updates(self):
+        return self.data["check_updates"]
+
+    @check_updates.setter
+    def check_updates(self, value):
+        self.data["check_updates"] = bool(value)
+
+    @property
+    def last_update_check(self):
+        """The day of the last look, as 'YYYY-MM-DD'. Empty means never."""
+        return self.data["last_update_check"]
+
+    @last_update_check.setter
+    def last_update_check(self, value):
+        self.data["last_update_check"] = str(value or "")
+
     def take_notice(self):
         """Return a one-time message and clear it."""
         message = self.data.get("notice", "")
@@ -282,6 +301,13 @@ def _validated(raw):
     action = raw.get("after_download")
     if isinstance(action, str) and action in AFTER_DOWNLOAD_CHOICES:
         result["after_download"] = action
+
+    if isinstance(raw.get("check_updates"), bool):
+        result["check_updates"] = raw["check_updates"]
+
+    checked = raw.get("last_update_check")
+    if isinstance(checked, str):
+        result["last_update_check"] = checked.strip()
 
     notice = raw.get("notice")
     if isinstance(notice, str):

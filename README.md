@@ -65,6 +65,9 @@ Cookies from : off
 - **A folder for each type**, even on another drive.
 - **Asks before playlists**, so one link does not pull 200 videos.
 - **Works without ffmpeg**, with a lower-quality fallback.
+- **Tells you when a new version is out**, once a day, in the background.
+  This can be turned off.
+- **Installs the extra programs for you** with winget, from the Tools menu.
 
 ## Where files are saved
 
@@ -102,6 +105,18 @@ missing, the app tells you at startup and offers to install it.
 `aria2c` is optional. Without it the built-in multi-connection downloader is
 used, which is already much faster than one connection.
 
+You do not have to type those winget commands yourself. **Tools → Install the
+extra programs** lists what is missing and installs it for you, one at a time.
+
+## The first run
+
+The first time you start the tool, it asks one question: where should the
+files go. It suggests `Downloads\FreeDownloader` inside your own user folder.
+Press Enter to keep it, or type another folder.
+
+Everything else already has a sensible default, and all of it can be changed
+later in **Settings**.
+
 ## How to install
 
 Pick the first line in this table that fits you.
@@ -110,7 +125,7 @@ Pick the first line in this table that fits you.
 |---|---|---|
 | Python 3.9 or newer | download the `.whl` from [Releases](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/releases) and `pip install` it | best way, easy to update |
 | no Python | download `FreeDownloader.exe` from [Releases](https://github.com/Mohammad-Hasan-it-96/free-downloader-tool/releases) | read the warning below |
-| the source folder | double-click **`Download Video.bat`** | needs Python on the computer |
+| the source folder | double-click **`Free Downloader.bat`** | needs Python on the computer |
 
 Every release also has a `SHA256SUMS.txt`, so you can check that a file is
 really the one that was built. On Windows:
@@ -135,7 +150,7 @@ tool, and the Python way always works.
 
 ## How to run
 
-**1. Portable, no install.** Double-click **`Download Video.bat`**, or run:
+**1. Portable, no install.** Double-click **`Free Downloader.bat`**, or run:
 
 ```bash
 python -m fdl
@@ -458,7 +473,8 @@ you run the tool — see **How to run** above.
   "history_limit": 500,
   "proxy": "",
   "headers": {},
-  "after_download": "nothing"
+  "after_download": "nothing",
+  "check_updates": true
 }
 ```
 
@@ -513,7 +529,9 @@ a split part file is never continued the wrong way.
 
 | Problem | What to do |
 |---|---|
-| `ffmpeg : NOT FOUND` in the header | Run `winget install Gyan.FFmpeg`, then restart. |
+| `ffmpeg : NOT FOUND` in the header | Tools -> Install the extra programs. |
+| Nothing happens when you double-click the `.bat` | Python is missing. The file now says so and gives the download link. |
+| The `.exe` will not start at all | Smart App Control is blocking it. Use Python and the wheel instead. |
 | "yt-dlp is NOT installed" | Say yes to the install question, or run the command it prints. |
 | Download fails on YouTube | Update yt-dlp (Tools), then set a cookies browser (Settings). |
 | "Cannot use the folder" | The drive or path does not exist. Change it in Settings. |

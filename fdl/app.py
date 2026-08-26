@@ -7,8 +7,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import (aria2_engine, batch, checksum, clipboard, http_engine, log,
-               paths, postaction, router, safety, ytdlp_engine)
+from . import (aria2_engine, batch, checksum, clipboard, http_engine,
+               installer, log, paths, postaction, router, safety, updates,
+               ytdlp_engine)
 from .batch import KIND_FILE, KIND_MEDIA
 from .categories import CATEGORY_ORDER, category_for
 from .config import BROWSERS, Config
@@ -78,6 +79,62 @@ def ensure_folder(path):
     if not os.access(path, os.W_OK):
         return False, "no permission to write here"
     return True, ""
+
+
+def as_full_path(text):
+    """Turn what the user typed into a full path.
+
+    A bare name such as `Movies` becomes a folder in the user's own home
+    folder. Kept as typed, it would mean a different place every time the
+    app was started from a different folder, and the files would be hard to
+    find again.
+    """
+    folder = Path(text).expanduser()
+    if not folder.is_absolute():
+        folder = Path.home() / folder
+    return folder
+
+
+def welcome(cfg):
+    """The first screen a new user sees. Runs once, before the menu.
+
+    One question only: where do the files go. Everything else has a working
+    default, and a wrong default is easier to fix later than a long form is
+    to fill in now.
+    """
+    clear_screen()
+    print(bold(cyan("\n  Welcome to Free Downloader Tool\n")))
+    print("  Paste any link and the tool works out what it is.")
+    print("  Videos come from YouTube and 1000+ other sites.")
+    print("  Any other file downloads directly, and continues where it")
+    print("  stopped if your connection breaks.\n")
+    print("  Files are sorted into folders by type:")
+    print(grey("    Videos, Audio, Programs, Archives, Documents, Images,"
+               " Code, Other\n"))
+
+    folder_ready = False
+    for _ in range(3):
+        print(f"  Downloads will go to: {cyan(cfg.base_dir)}")
+        answer = input(bold("  Press Enter to keep it, or type another "
+                            "folder: ")).strip().strip('"')
+        if answer:
+            cfg.base_dir = str(as_full_path(answer))
+        ok, why = ensure_folder(cfg.base_dir)
+        if ok:
+            folder_ready = True
+            break
+        print(red(f"\n  That folder cannot be used: {why}\n"))
+
+    saved, why = cfg.save()
+    if not saved:
+        print(red(f"\n  The settings could not be saved: {why}"))
+    elif folder_ready:
+        print(green(f"\n  Ready. Your files will go to {cfg.base_dir}"))
+    else:
+        print(yellow(f"\n  {cfg.base_dir} still cannot be used."))
+        print(grey("  Change it in Settings before your first download."))
+    print(grey(f"  Settings are kept in {CONFIG_PATH}"))
+    pause()
 
 
 def ask_url(prompt="\nPaste the URL: "):
@@ -648,7 +705,7 @@ def change_base_dir(cfg):
     new = input(bold("New folder path (blank to keep): ")).strip().strip('"')
     if not new:
         return
-    folder = Path(new).expanduser()
+    folder = as_full_path(new)
     ok, reason = ensure_folder(folder)
     if not ok:
         print(red(f"That folder cannot be used: {reason}"))
@@ -884,8 +941,17 @@ SETTINGS_MENU = [
     ("9", "Proxy"),
     ("10", "Extra headers"),
     ("11", "After a download finishes"),
+    ("12", "Look for a new version (on / off)"),
     ("0", "Back"),
 ]
+
+
+def toggle_update_check(cfg):
+    cfg.check_updates = not cfg.check_updates
+    state = "on" if cfg.check_updates else "off"
+    _save(cfg, f"Looking for a new version is now {state}.")
+    if cfg.check_updates:
+        print(grey("The tool asks GitHub once a day, in the background."))
 
 
 def settings_screen(cfg, toolbox):
@@ -916,6 +982,8 @@ def settings_screen(cfg, toolbox):
               f"{cyan(str(header_count)) if header_count else grey('none')}")
         print(f"  After a download       : "
               f"{cyan(postaction.CHOICES[cfg.after_download])}")
+        print(f"  Look for a new version : "
+              f"{green('on') if cfg.check_updates else yellow('off')}")
         print()
         for key, label in SETTINGS_MENU:
             print(f"  {cyan(key)}. {label}")
@@ -952,6 +1020,9 @@ def settings_screen(cfg, toolbox):
         elif choice == "11":
             change_after_download(cfg)
             pause()
+        elif choice == "12":
+            toggle_update_check(cfg)
+            pause()
         elif choice == "0":
             return
         else:
@@ -964,11 +1035,57 @@ def settings_screen(cfg, toolbox):
 TOOLS_MENU = [
     ("1", "Show available formats for a URL"),
     ("2", "Update yt-dlp"),
-    ("3", "Look for ffmpeg / deno / aria2c again"),
-    ("4", "Check a file against a checksum"),
-    ("5", "Show the last lines of the log"),
+    ("3", "Install the extra programs (ffmpeg, deno, aria2c)"),
+    ("4", "Look for ffmpeg / deno / aria2c again"),
+    ("5", "Check a file against a checksum"),
+    ("6", "Show the last lines of the log"),
     ("0", "Back"),
 ]
+
+
+def update_ytdlp_screen():
+    """Update yt-dlp with pip. Not possible inside the single .exe."""
+    if is_frozen():
+        print(yellow("\nyt-dlp is built into this .exe, so pip cannot "
+                     "update it here."))
+        print(grey("Download the newest version of the app instead:"))
+        print(f"  {cyan(updates.RELEASES_PAGE)}")
+        return
+    install_ytdlp()
+
+
+def install_extras(toolbox):
+    """Offer to install ffmpeg, deno, and aria2c with winget."""
+    if not installer.winget_available():
+        print(yellow("\nwinget was not found, so this cannot install "
+                     "anything for you."))
+        print(grey("winget comes with Windows 10 and 11. On other systems, "
+                   "use your own package manager."))
+        return
+
+    todo = installer.missing(toolbox)
+    if not todo:
+        print(green("\nAll three programs are already installed."))
+        return
+
+    print(bold("\nThese are missing:\n"))
+    for name, _package, purpose in todo:
+        print(f"  {cyan(name):<20} {grey(purpose)}")
+    print(grey("\nwinget opens its own window and may ask for permission."))
+
+    for name, package, _purpose in todo:
+        if not ask_yes_no(f"\nInstall {name}?", default_no=False):
+            continue
+        ok, why = installer.install(package)
+        if ok:
+            print(green(f"{name} is installed."))
+            log.info("installed %s with winget", name)
+        else:
+            print(red(f"{name} could not be installed: {why}"))
+            log.warning("winget failed for %s: %s", name, why)
+
+    toolbox.refresh()
+    print(grey("\nSearched again for all three."))
 
 
 def check_a_file():
@@ -1018,16 +1135,19 @@ def tools_screen(cfg, toolbox):
                 ytdlp_engine.list_formats(url, toolbox, cfg.cookies_browser)
             pause()
         elif choice == "2":
-            install_ytdlp()
+            update_ytdlp_screen()
             pause()
         elif choice == "3":
+            install_extras(toolbox)
+            pause()
+        elif choice == "4":
             toolbox.refresh()
             print(green("\nSearched again."))
             pause()
-        elif choice == "4":
+        elif choice == "5":
             check_a_file()
             pause()
-        elif choice == "5":
+        elif choice == "6":
             show_log()
             pause()
         elif choice == "0":
@@ -1039,7 +1159,7 @@ def tools_screen(cfg, toolbox):
 
 # -------------------------------- screen -------------------------------- #
 
-def draw_header(cfg, toolbox):
+def draw_header(cfg, toolbox, update_check=None):
     line = "=" * 56
     print(bold(cyan(line)))
     print(bold(cyan(f"          {TITLE}")))
@@ -1059,6 +1179,9 @@ def draw_header(cfg, toolbox):
              if cfg.speed_limit_kb else "")
     print(f"Cookies from : {green(cookies) if cookies else yellow('off')}"
           f"{speed}")
+    news = update_check.message if update_check else ""
+    if news:
+        print(yellow(news))
     print()
 
 
@@ -1076,10 +1199,13 @@ MENU = [
 
 def main():
     enable_colors()
+    first_run = not CONFIG_PATH.exists()
     cfg = Config.load(CONFIG_PATH)
     log.setup(LOG_PATH)
     log.info("app started, base folder %s", cfg.base_dir)
     log.info("proxy: %s", http_engine.configure_proxy(cfg.proxy))
+    if first_run:
+        welcome(cfg)
     if not ensure_ytdlp():
         return
 
@@ -1092,10 +1218,12 @@ def main():
 
     toolbox = Toolbox()
     history = History.load(HISTORY_PATH, cfg.history_limit)
+    # In a thread, so the menu never waits for the network.
+    update_check = updates.BackgroundCheck().start(cfg)
 
     while True:
         clear_screen()
-        draw_header(cfg, toolbox)
+        draw_header(cfg, toolbox, update_check)
         for key, label in MENU:
             print(f"  {cyan(key)}. {label}")
         choice = input(bold("\nSelect: ")).strip()

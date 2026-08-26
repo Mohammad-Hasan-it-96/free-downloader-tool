@@ -147,6 +147,29 @@ def test_is_frozen_is_false_under_plain_python():
     assert app.is_frozen() is False
 
 
+def test_tools_update_ytdlp_never_runs_pip_in_the_exe(monkeypatch, capsys):
+    """The same trap as the yt-dlp call: pip would relaunch the menu."""
+    monkeypatch.setattr(app, "is_frozen", lambda: True)
+    monkeypatch.setattr(app, "install_ytdlp",
+                        lambda: pytest.fail("pip must not be used in the .exe"))
+
+    app.update_ytdlp_screen()
+
+    said = capsys.readouterr().out
+    assert "built into this .exe" in said
+    assert "releases" in said.lower()
+
+
+def test_tools_update_ytdlp_uses_pip_under_python(monkeypatch):
+    called = []
+    monkeypatch.setattr(app, "is_frozen", lambda: False)
+    monkeypatch.setattr(app, "install_ytdlp", lambda: called.append(True))
+
+    app.update_ytdlp_screen()
+
+    assert called == [True]
+
+
 # ------------------------- a folder everyone has ------------------------- #
 
 def test_the_default_folder_is_the_users_own_downloads():

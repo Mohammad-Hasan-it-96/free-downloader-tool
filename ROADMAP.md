@@ -178,14 +178,26 @@ is the only thing that would change it, and it costs money every year.
 - ⬜ Publish the wheel to PyPI, so `pip install free-downloader-tool` works
   without downloading a file first. This needs a PyPI account and a token.
 
-**Step 3 — make it friendly** ⬜
+**Step 3 — make it friendly** ✅
 
-- ⬜ The `.bat` file should try `py -3`, then `python`, and print the
-  python.org link when neither works. On a clean Windows 11, `python` opens
-  the Microsoft Store instead.
-- ⬜ A Tools option that installs ffmpeg, deno, and aria2c with `winget`.
-- ⬜ A short first-run screen: choose a folder, then start.
-- ⬜ A daily update check against the GitHub releases API.
+- ✅ **A launcher that explains itself.** `Free Downloader.bat` tries `py -3`,
+  `py`, `python`, then `python3`. When none of them works it prints the
+  python.org link and says to tick "Add python.exe to PATH". Before this, a
+  computer without Python showed one confusing line, or nothing at all.
+  `Download Video.bat` still works, so old shortcuts do not break.
+- ✅ **Tools -> Install the extra programs.** Lists what is missing and
+  installs ffmpeg, deno, and aria2c with `winget`, one at a time. Typing three
+  winget commands by hand is where most people gave up.
+- ✅ **A first-run screen.** One question: where do the files go. A folder
+  that cannot be used is asked again, up to three times, and a bare name such
+  as `Movies` becomes a folder in the user's own home folder instead of
+  wherever the app happened to start.
+- ✅ **A daily update check**, in a background thread so the menu never waits.
+  Any failure means "no news". It can be turned off in Settings. This matters
+  most for the `.exe`, where yt-dlp is built in and pip cannot update it.
+- ✅ **Tools -> Update yt-dlp is honest in the `.exe`.** It used to call pip
+  through `sys.executable`, which in a frozen build opened another copy of the
+  menu. The same trap as the yt-dlp call in step 1.
 
 ## Maybe later
 
@@ -214,8 +226,7 @@ These are useful, but they are not needed for a good tool. They go last.
 6. ✅ Phase 6 — convenience.
 7. ✅ Phase 7 — packaging and quality.
 
-8. 🔄 Phase 8 — ready for other people. Steps 1 and 2 are done. Step 3 is
-   still open.
+8. ✅ Phase 8 — ready for other people.
 
-Phases 0 to 7 are done. Phase 8 is what turns this from "my tool" into a tool
-anyone can download.
+All planned phases are done. The only thing left in Phase 8 is publishing
+to PyPI, which needs an account and a token.
