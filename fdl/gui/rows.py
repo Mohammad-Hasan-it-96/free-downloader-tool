@@ -130,7 +130,7 @@ class Row(ttk.Frame):
 
 
 class RowList(ttk.Frame):
-    """A scrolling box of Rows. Newest at the top."""
+    """A scrolling box of Rows, oldest first."""
 
     def __init__(self, parent, on_cancel, on_open, on_retry):
         super().__init__(parent)
@@ -149,6 +149,12 @@ class RowList(ttk.Frame):
         self.inner.bind("<Configure>", self._resize_inner)
         self.canvas.bind("<Configure>", self._resize_canvas)
         self.canvas.configure(yscrollcommand=scrollbar.set)
+        # A Canvas has no wheel of its own, and the wheel event goes to the
+        # small label under the pointer, not to us. So listen everywhere and
+        # keep only what happened inside this box.
+        self.bind_all("<MouseWheel>", self._wheel, add="+")
+        self.bind_all("<Button-4>", self._wheel, add="+")
+        self.bind_all("<Button-5>", self._wheel, add="+")
 
         self.canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -164,6 +170,24 @@ class RowList(ttk.Frame):
     def _resize_canvas(self, event):
         self.canvas.itemconfigure(self._window, width=event.width)
 
+    def _scroll_to_end(self):
+        self._resize_inner()
+        self.canvas.yview_moveto(1.0)
+
+    def _wheel(self, event):
+        """Scroll the list, but only when the pointer is over it."""
+        if not str(event.widget).startswith(str(self.canvas)):
+            return
+        if event.num == 4:
+            steps = -1
+        elif event.num == 5:
+            steps = 1
+        elif abs(event.delta) >= 120:      # Windows counts in 120s
+            steps = int(-event.delta / 120)
+        else:                              # macOS counts in ones
+            steps = -1 if event.delta > 0 else 1
+        self.canvas.yview_scroll(steps, "units")
+
     def show(self, job):
         """Add the row if it is new, then update it."""
         if self.empty is not None:
@@ -176,6 +200,10 @@ class RowList(ttk.Frame):
             row.pack(fill="x", expand=True)
             ttk.Separator(self.inner, orient="horizontal").pack(fill="x")
             self.rows[job.job_id] = row
+            # Show what was just added, instead of leaving it below the edge.
+            # after_idle, because the new row has no size until Tk lays it out
+            # and the scroll region is still the old one.
+            self.canvas.after_idle(self._scroll_to_end)
         else:
             row.refresh()
         self._resize_inner()
