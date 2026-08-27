@@ -19,6 +19,10 @@ Tests write settings to `FDL_HOME` in CI. Set it locally too if you do not want
 the suite to touch `config.json` in the repo:
 `FDL_HOME=/tmp/fdl python -m pytest`.
 
+`ROADMAP.md` is the plan and the log: numbered phases, each ticked off as it
+lands. Work that changes what the user gets belongs there too, in the same
+plain wording as the rest of the file.
+
 ## Making a release
 
 The version lives in **one** place, `fdl/__init__.py`. `pyproject.toml` reads
@@ -145,6 +149,14 @@ Three rules hold this together:
 3. **A worker must never die quietly**, or its row spins for ever.
    `Manager._guarded` catches everything and ends the job as failed.
 
+A job is a row, and a row is reused. `Job` remembers the quality and the
+playlist choice made **when the link was added**, so Retry repeats that choice
+even if the combobox has moved since. `Manager.retry()` has one trap: it must
+give the job a **new** `threading.Event`. The old one is still set from the
+stop that ended the last attempt and would kill the new one in the first
+millisecond. The part file is left alone, so a download that broke at 80%
+carries on from there. `can_retry` is true only for FAILED and CANCELLED.
+
 Other things worth knowing:
 
 - `run_streaming` needs `--newline`, or yt-dlp rewrites one line and no
@@ -208,6 +220,17 @@ tokens and `user:pass@host` before writing.
   `run()` builds, change `wants_passthrough()` to match —
   `test_frozen.py::test_the_command_that_run_builds_is_the_one_we_catch` ties
   the two together.
+- **yt-dlp writes UTF-8; the Windows console does not read it.**
+  `run_streaming` decodes with `encoding="utf-8", errors="replace"`. Without
+  that, a machine on a non-Latin code page (cp1256 on this one) turns every
+  message into nonsense.
+- **"stopped with code 1" is not an error message.** yt-dlp prints the real
+  reason on a line beginning `ERROR:`. `Manager._run_media` keeps those lines
+  and the last one becomes `job.error`. `clean_error()` cuts the trailing
+  "See https://..." and the dangling word it leaves behind; `explain()` turns
+  the common failures into something the user can act on (close the browser,
+  sign in, update yt-dlp). A new failure class goes in `HINTS`, with a case in
+  `test_ytdlp_errors.py`.
 - **No pip in the exe.** Anything that shells out to
   `sys.executable -m pip` only works under a real Python. Guard it with
   `app.is_frozen()`.
