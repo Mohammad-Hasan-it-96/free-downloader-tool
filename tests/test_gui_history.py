@@ -4,6 +4,8 @@ Building a window needs a screen, so only the rule is tested here. That is
 where the decisions are, and it is the part that can be wrong.
 """
 
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("tkinter", reason="no tkinter on this machine")
@@ -17,7 +19,10 @@ def test_a_finished_download_shows_its_file_and_folder():
     what, name, when, size, where = row_values({
         "status": STATUS_DONE,
         "url": "https://example.com/get?id=9",
-        "path": r"C:\Users\me\Downloads\Archives\tool.zip",
+        # Built for whichever system runs the test. A Windows path
+        # written out in full has no separators on Linux, so .name
+        # would give back the whole string.
+        "path": str(Path.home() / "Downloads" / "Archives" / "tool.zip"),
         "size": 2048,
         "when": "2026-08-24T14:05:00+03:00",
         "category": "Archives",
