@@ -34,6 +34,35 @@ def test_a_very_long_line_is_refused():
     assert clipboard.looks_like_a_link("https://x.com/" + "a" * 3000) is False
 
 
+def test_a_new_link_on_the_clipboard_is_offered():
+    assert clipboard.new_link("https://a.com/x.zip", "") == "https://a.com/x.zip"
+
+
+def test_the_same_clipboard_is_offered_only_once():
+    """Without this, the watch would add the link again every second."""
+    same = "https://a.com/x.zip"
+    assert clipboard.new_link(same, same) is None
+
+
+def test_text_that_is_not_a_link_is_ignored():
+    """Copying a sentence must never start a download."""
+    assert clipboard.new_link("meet me at 5", "") is None
+
+
+def test_an_unreadable_clipboard_is_ignored():
+    """None means no clipboard at all, which is not a change worth acting on."""
+    assert clipboard.new_link(None, "") is None
+
+
+def test_a_link_already_in_the_list_is_not_added_twice():
+    link = "https://a.com/x.zip"
+    assert clipboard.new_link(link, "older text", known=[link]) is None
+
+
+def test_spaces_around_a_copied_link_are_removed():
+    assert clipboard.new_link("  https://a.com/x.zip  ", "") ==         "https://a.com/x.zip"
+
+
 def test_reading_the_clipboard_never_raises():
     result = clipboard.read()
     assert result is None or isinstance(result, str)

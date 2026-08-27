@@ -73,6 +73,11 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 - A row that failed gets a **Retry** button, and **Retry failed** at the
   bottom tries all of them at once. A retry continues from the byte the
   first try reached, so nothing is downloaded twice.
+- **Watch the clipboard** is a checkbox. While it is ticked, any link you
+  copy anywhere is added by itself, so you never touch the window. It starts
+  off every time you open the app, because it downloads without asking. A
+  link already on the clipboard when you tick it is left alone, and the same
+  link is never added twice.
 - **Clear done** takes the finished rows out, so a long list stays readable.
   Rows that failed stay, because they still have a Retry button. The history
   keeps everything either way.
@@ -83,7 +88,7 @@ on Windows and macOS. On Linux install `python3-tk` first. If the window
 cannot open, the tool says so and falls back to the text menu.
 
 **Still only in the text menu:** the queue from a `.txt` file, the history
-screen, the clipboard watch, checksums, a proxy, extra headers, and a folder
+screen, checksums, a proxy, extra headers, and a folder
 for each type. Use `Free Downloader (terminal).bat` or `fdl` for those.
 
 ## Main features
@@ -578,7 +583,7 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 444 tests cover file naming, categories, settings, history, the
+needed. 450 tests cover file naming, categories, settings, history, the
 queue, link routing, safety checks, checksums, the log, the clipboard, the
 proxy, logins in links, the speed limit, multi-connection downloads, where settings are stored, and real resume —
 including a server that cuts the connection in the middle, and the check that

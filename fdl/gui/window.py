@@ -13,12 +13,16 @@ from tkinter import messagebox, ttk
 from . import console, jobs as job_state
 from .rows import RowList
 from .settings_dialog import SettingsDialog
-from .. import batch, paths, postaction, updates, ytdlp_engine
+from .. import (batch, clipboard, log, paths, postaction, updates,
+                ytdlp_engine)
 from ..config import Config
 from ..history import History
 from ..tools import Toolbox, ytdlp_installed
 
 POLL_MS = 120
+# How often the clipboard is read while the watch is on. On Windows this
+# costs nothing: it is a plain ctypes call, not a new process.
+WATCH_MS = 1000
 TITLE = "Free Downloader Tool"
 
 QUALITY_ORDER = ["1", "2", "3", "4", "5", "6"]
@@ -41,6 +45,7 @@ class MainWindow(tk.Tk):
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(POLL_MS, self._drain)
+        self.after(WATCH_MS, self._watch_tick)
         self.after(2000, self._show_news)
         if first_run:
             self.after(300, self._first_time)
@@ -92,6 +97,19 @@ class MainWindow(tk.Tk):
         ttk.Label(options, foreground="#777777", font=("Segoe UI", 8),
                   text="(used only for video and audio pages)").grid(
             row=0, column=3, sticky="w", padx=(10, 0))
+
+        # Off at every start, and never saved. Turning it on means the tool
+        # downloads without being asked, so that has to be a fresh decision.
+        self.watching = tk.BooleanVar(value=False)
+        ttk.Checkbutton(options, variable=self.watching,
+                        text="Watch the clipboard",
+                        command=self._toggle_watch).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(options, foreground="#777777", font=("Segoe UI", 8),
+                  text="(a link you copy is added by itself)").grid(
+            row=1, column=2, columnspan=2, sticky="w", padx=(10, 0),
+            pady=(4, 0))
+        self._clip_seen = ""
 
         where = ttk.Frame(outer)
         where.grid(row=2, column=0, sticky="ew", pady=(10, 6))
@@ -199,6 +217,66 @@ class MainWindow(tk.Tk):
         started = self.manager.retry_all()
         if started:
             self._say(f"Trying {started} again.")
+
+    # --------------------------- the clipboard --------------------------- #
+
+    def _clipboard_text(self):
+        """The clipboard text, or None when it cannot be read at all.
+
+        Tk is asked first because it costs nothing while a window is open.
+        An empty string is not the same answer as None: the first means the
+        clipboard holds no text, the second that there is no clipboard.
+        """
+        try:
+            return self.clipboard_get()
+        except tk.TclError:
+            return clipboard.read()
+
+    def _toggle_watch(self):
+        if not self.watching.get():
+            log.info("gui clipboard watch stopped")
+            self._say("The clipboard is no longer watched.")
+            return
+
+        text = self._clipboard_text()
+        if text is None:
+            self.watching.set(False)
+            messagebox.showwarning(
+                TITLE, "The clipboard cannot be read on this computer.\n\n"
+                       "On Linux, install xclip, xsel, or wl-clipboard.",
+                parent=self)
+            return
+        # What is already copied is left alone. Turning the watch on must not
+        # start a download the user did not ask for.
+        self._clip_seen = text
+        log.info("gui clipboard watch started")
+        self._say("Watching the clipboard. Copy a link and it is added.")
+
+    def _watch_tick(self):
+        """Read the clipboard, and add any new link that appears on it."""
+        self.after(WATCH_MS, self._watch_tick)
+        if not self.watching.get():
+            return
+        text = self._clipboard_text()
+        if text is None:
+            return                  # another program has it open just now
+        link = clipboard.new_link(
+            text, self._clip_seen,
+            known=[job.url for job in self.manager.jobs.values()])
+        self._clip_seen = text
+        if link is None:
+            return
+
+        ok, why = self.ensure_folder(self.cfg.base_dir)
+        if not ok:
+            self.watching.set(False)
+            messagebox.showerror(
+                TITLE, f"The download folder cannot be used:\n\n{why}\n\n"
+                       "Change it under Settings.", parent=self)
+            return
+        self.list.show(self.manager.add(link, self._quality_key(),
+                                        self.whole_playlist.get()))
+        self._say(f"Added from the clipboard: {link}")
 
     def _clear_done(self):
         """Take the finished rows out, so a long list stays readable."""

@@ -225,6 +225,9 @@ Three choices were made before any code:
   stay, because Retry still applies to them.
 - ✅ The list scrolls with the mouse wheel, and a new row scrolls itself
   into view.
+- ✅ **Watch the clipboard**, the same idea as in the menu but without the
+  question: while the box is ticked, a copied link becomes a row by itself.
+  Off at every start, because it downloads without asking.
 - ✅ Pressing Stop no longer writes a "failed" line in the history. A stop is
   not a result: the part file is kept and Retry carries on from it. The same
   now holds for the queue in the terminal.
@@ -249,9 +252,8 @@ Three choices were made before any code:
 
 **Still terminal only**
 
-The queue from a `.txt` file, the history screen, the clipboard watch,
-checksums, a proxy, extra headers, and a folder for each type. These are
-tabs for a later version.
+The queue from a `.txt` file, the history screen, checksums, a proxy, extra
+headers, and a folder for each type. These are tabs for a later version.
 
 ## Maybe later
 

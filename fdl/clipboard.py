@@ -34,6 +34,24 @@ def looks_like_a_link(text):
     return parts.scheme in ("http", "https") and bool(parts.netloc)
 
 
+def new_link(text, seen, known=()):
+    """The link worth adding when the clipboard turns from `seen` into `text`.
+
+    None means do nothing: the clipboard did not change, it could not be
+    read, it holds something that is not a link, or that link is already in
+    the list. Keeping this decision here means it can be tested without a
+    window, and both front ends can follow the same rule.
+    """
+    if text is None or text == seen:
+        return None
+    link = text.strip()
+    if not looks_like_a_link(link):
+        return None
+    if link in set(known):
+        return None
+    return link
+
+
 def read():
     """The clipboard text.
 

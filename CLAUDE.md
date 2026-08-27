@@ -203,6 +203,13 @@ come apart while a comma inside a query string survives. `limiter.py` is one tok
 back to plain status lines when stdout is not a terminal. `log.py` redacts
 tokens and `user:pass@host` before writing.
 
+`clipboard.new_link()` holds the whole rule for the watch - changed, is a
+link, not already in the list - so it can be tested without a screen. The
+window only supplies the text and the list. It reads the clipboard through Tk
+first, because that is free while a window is open; `clipboard.read()` is the
+fallback. An empty string and `None` are different answers: no text, against
+no clipboard at all.
+
 `history.STATUS_STOPPED` is a status that exists only in memory. A download
 the user stopped is never written to `history.json`: the part file is still
 there, Retry continues from it, and recording every change of mind would fill
