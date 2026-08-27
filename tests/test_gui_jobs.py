@@ -605,3 +605,74 @@ def test_a_stopped_media_download_is_not_recorded(setup, monkeypatch):
 
     assert job.status == jobs.CANCELLED
     assert history.rows == []
+
+
+# --------------------- how many run at the same time -------------------- #
+
+def in_a_thread(work):
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    return worker
+
+
+def test_the_gate_lets_only_so_many_in_at_once():
+    gate = jobs._Gate(2)
+    with gate:
+        assert gate.crowded() is False       # room for one more
+        with gate:
+            assert gate.crowded() is True    # both slots taken
+    assert gate.crowded() is False           # both given back
+
+
+def test_raising_the_number_frees_a_waiting_download():
+    """The whole point: the change works without closing the window."""
+    gate = jobs._Gate(1)
+    started = threading.Event()
+    with gate:
+        worker = in_a_thread(lambda: [gate.__enter__(), started.set(),
+                                      gate.__exit__()])
+        assert started.wait(0.3) is False     # held back by the limit of 1
+        gate.set_limit(2)
+        assert started.wait(2) is True        # let in at once
+    worker.join(timeout=2)
+
+
+def test_lowering_the_number_does_not_stop_what_is_running():
+    """Cutting a download in half would lose the part already fetched."""
+    gate = jobs._Gate(3)
+    with gate:
+        with gate:
+            gate.set_limit(1)
+            # Both keep their slot. The new number applies to the next one.
+            assert gate.crowded() is True
+
+
+def test_closing_lets_a_waiting_download_go():
+    """Otherwise its thread would keep the program alive after the window."""
+    gate = jobs._Gate(1)
+    passed = threading.Event()
+    with gate:
+        worker = in_a_thread(lambda: [gate.__enter__(), passed.set(),
+                                      gate.__exit__()])
+        assert passed.wait(0.3) is False
+        gate.open_wide()
+        assert passed.wait(2) is True
+    worker.join(timeout=2)
+
+
+def test_the_manager_starts_with_the_number_from_the_settings(setup):
+    manager, cfg, _history = setup
+    assert manager.parallel == cfg.max_parallel
+
+
+def test_the_manager_changes_the_number_without_a_restart(setup):
+    manager, _cfg, _history = setup
+    manager.set_parallel(6)
+    assert manager.parallel == 6
+
+
+def test_the_number_is_never_zero(setup):
+    """Zero would mean nothing ever downloads again."""
+    manager, _cfg, _history = setup
+    manager.set_parallel(0)
+    assert manager.parallel == 1

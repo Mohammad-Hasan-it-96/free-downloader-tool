@@ -300,17 +300,14 @@ class MainWindow(tk.Tk):
         postaction.open_folder(self.cfg.base_dir)
 
     def _settings(self):
-        before = self.cfg.max_parallel
         dialog = SettingsDialog(self, self.cfg, self.ensure_folder)
         self.wait_window(dialog)
         if not dialog.saved:
             return
         self._refresh_folder()
-        if self.cfg.max_parallel != before:
-            self._say("Saved. 'Downloads at the same time' starts working "
-                      "when you next open the app.")
-        else:
-            self._say("Settings saved.")
+        # Live: a download held back by the old number can start right now.
+        self.manager.set_parallel(self.cfg.max_parallel)
+        self._say("Settings saved.")
 
     # ------------------------------ the timer ---------------------------- #
 

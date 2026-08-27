@@ -225,6 +225,9 @@ Three choices were made before any code:
   stay, because Retry still applies to them.
 - ✅ The list scrolls with the mouse wheel, and a new row scrolls itself
   into view.
+- ✅ **Downloads at the same time** changes while the app is open. A pool
+  cannot be resized, so the pool is built at the largest size allowed and a
+  gate decides how many of its threads may work.
 - ✅ **Watch the clipboard**, the same idea as in the menu but without the
   question: while the box is ticked, a copied link becomes a row by itself.
   Off at every start, because it downloads without asking.

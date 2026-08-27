@@ -30,9 +30,67 @@ CANCELLED = "cancelled"
 
 FINISHED = (DONE, FAILED, SKIPPED, CANCELLED)
 
+# The most the settings allow. The pool is built this wide and the gate
+# below decides how many of its threads may work at once.
+MAX_PARALLEL = 8
+
 # How often a running download may send news to the window. Faster than this
 # only makes the window busy; the numbers on screen do not look any better.
 UPDATE_SECONDS = 0.15
+
+
+class _Gate:
+    """Lets only so many downloads run at the same time.
+
+    A ThreadPoolExecutor cannot be made wider or narrower once it exists, so
+    the pool is built at the largest size the settings allow and this decides
+    how many of its threads may work. Changing the number then takes effect
+    at once, instead of the next time the window opens.
+    """
+
+    def __init__(self, limit):
+        self._limit = max(1, int(limit))
+        self._running = 0
+        self._room = threading.Condition()
+
+    @property
+    def limit(self):
+        with self._room:
+            return self._limit
+
+    def set_limit(self, value):
+        """Change how many may run. Anything held back starts at once."""
+        with self._room:
+            self._limit = max(1, int(value))
+            self._room.notify_all()
+
+    def open_wide(self):
+        """Let everything through, used when the window is closing.
+
+        A thread stuck waiting for a free slot would otherwise keep the
+        program alive after the last window has gone.
+        """
+        with self._room:
+            self._limit = None
+            self._room.notify_all()
+
+    def crowded(self):
+        """True when a download asking to start now would have to wait."""
+        with self._room:
+            return self._limit is not None and self._running >= self._limit
+
+    def __enter__(self):
+        with self._room:
+            while self._limit is not None and self._running >= self._limit:
+                self._room.wait()
+            self._running += 1
+        return self
+
+    def __exit__(self, *_ignored):
+        with self._room:
+            self._running -= 1
+            self._room.notify()
+        return False
 
 
 @dataclass
@@ -93,9 +151,9 @@ class Manager:
         self.events = queue.Queue()
         self.jobs = {}
         self._ids = itertools.count(1)
+        self._gate = _Gate(cfg.max_parallel)
         self._pool = pool or concurrent.futures.ThreadPoolExecutor(
-            max_workers=max(1, cfg.max_parallel),
-            thread_name_prefix="fdl-gui")
+            max_workers=MAX_PARALLEL, thread_name_prefix="fdl-gui")
 
     # ------------------------------ adding ------------------------------ #
 
@@ -107,6 +165,15 @@ class Manager:
         self._announce(job)
         self._pool.submit(self._guarded, job, quality, whole_playlist)
         return job
+
+    @property
+    def parallel(self):
+        """How many downloads may run at the same time."""
+        return self._gate.limit
+
+    def set_parallel(self, count):
+        """Change that number now, without closing the window."""
+        self._gate.set_limit(count)
 
     def retry(self, job_id):
         """Run a failed or stopped job again, in the same row.
@@ -174,6 +241,9 @@ class Manager:
     def close(self):
         for job in self.jobs.values():
             job.stop.set()
+        # Anything still waiting for a free slot has to be let go, or its
+        # thread would hold the program open after the window has closed.
+        self._gate.open_wide()
         self._pool.shutdown(wait=False)
 
     @property
@@ -196,7 +266,12 @@ class Manager:
     def _guarded(self, job, quality, whole_playlist):
         """A worker must never die quietly: the row would freeze for ever."""
         try:
-            self._run(job, quality, whole_playlist)
+            if self._gate.crowded():
+                job.status = WAITING
+                job.message = "waiting for a free slot..."
+                self._announce(job)
+            with self._gate:
+                self._run(job, quality, whole_playlist)
         except Exception as err:      # noqa: BLE001
             log.error("gui job failed: %s", err)
             self._finish(job, FAILED, str(err))
@@ -206,6 +281,7 @@ class Manager:
             self._finish(job, CANCELLED, message="cancelled")
             return
 
+        job.status = CHECKING
         job.message = "checking the link..."
         self._announce(job)
 

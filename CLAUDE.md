@@ -203,6 +203,13 @@ come apart while a comma inside a query string survives. `limiter.py` is one tok
 back to plain status lines when stdout is not a terminal. `log.py` redacts
 tokens and `user:pass@host` before writing.
 
+`jobs._Gate` is why "Downloads at the same time" works without a restart. A
+`ThreadPoolExecutor` cannot be resized, so the pool is built at `MAX_PARALLEL`
+and the gate decides how many of its threads may work. Two rules: lowering the
+number never stops a download already running, only the next one; and
+`Manager.close()` must call `_gate.open_wide()`, or a thread waiting for a
+free slot keeps the program alive after the last window has gone.
+
 `clipboard.new_link()` holds the whole rule for the watch - changed, is a
 link, not already in the list - so it can be tested without a screen. The
 window only supplies the text and the list. It reads the clipboard through Tk

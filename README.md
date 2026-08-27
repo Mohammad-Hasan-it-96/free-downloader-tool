@@ -73,6 +73,8 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 - A row that failed gets a **Retry** button, and **Retry failed** at the
   bottom tries all of them at once. A retry continues from the byte the
   first try reached, so nothing is downloaded twice.
+- **Downloads at the same time** works the moment you save it. A row that
+  was held back says **waiting**, and starts as soon as there is room.
 - **Watch the clipboard** is a checkbox. While it is ticked, any link you
   copy anywhere is added by itself, so you never touch the window. It starts
   off every time you open the app, because it downloads without asking. A
@@ -328,7 +330,9 @@ While the queue runs, each file has its own line:
 ```
 
 One bad link never stops the others. How many run at the same time is a
-setting (1 to 8, default 3).
+setting (1 to 8, default 3). In the window you can change it while downloads
+are already going: a link held back starts straight away, and a download
+already running is never cut off.
 
 Media links in a queue are handled one after another, because yt-dlp shows
 its own progress.
@@ -583,7 +587,7 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 450 tests cover file naming, categories, settings, history, the
+needed. 457 tests cover file naming, categories, settings, history, the
 queue, link routing, safety checks, checksums, the log, the clipboard, the
 proxy, logins in links, the speed limit, multi-connection downloads, where settings are stored, and real resume —
 including a server that cuts the connection in the middle, and the check that
