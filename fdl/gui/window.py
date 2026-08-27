@@ -13,7 +13,7 @@ from tkinter import messagebox, ttk
 from . import console, jobs as job_state
 from .rows import RowList
 from .settings_dialog import SettingsDialog
-from .. import paths, postaction, updates, ytdlp_engine
+from .. import batch, paths, postaction, updates, ytdlp_engine
 from ..config import Config
 from ..history import History
 from ..tools import Toolbox, ytdlp_installed
@@ -121,12 +121,16 @@ class MainWindow(tk.Tk):
         self.status = ttk.Label(bottom, text="", foreground="#555555",
                                 font=("Segoe UI", 9))
         self.status.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self.clear_button = ttk.Button(bottom, text="Clear done",
+                                       command=self._clear_done)
+        self.clear_button.grid(row=0, column=2, padx=(6, 0))
+        self.clear_button.grid_remove()
         self.retry_button = ttk.Button(bottom, text="Retry failed",
                                        command=self._retry_all)
-        self.retry_button.grid(row=0, column=2, padx=(6, 6))
+        self.retry_button.grid(row=0, column=3, padx=(6, 6))
         self.retry_button.grid_remove()
         ttk.Button(bottom, text="Open folder",
-                   command=self._open_base_folder).grid(row=0, column=3)
+                   command=self._open_base_folder).grid(row=0, column=4)
 
         self._refresh_folder()
         self._check_tools()
@@ -139,18 +143,26 @@ class MainWindow(tk.Tk):
         except tk.TclError:
             self._say("There is no text on the clipboard.")
             return
-        self.url.set(text.strip())
+        links = batch.split_links(text)
+        if len(links) > 1:
+            # The box is one line, so keep them on one line.
+            self.url.set(" ".join(links))
+            self._say(f"{len(links)} links pasted. Press Add.")
+        else:
+            self.url.set(text.strip())
         self.entry.icursor("end")
 
     def _add(self):
-        link = self.url.get().strip().strip('"')
-        if not link:
-            self._say("Paste a link first.")
-            return
-        if not link.lower().startswith(("http://", "https://")):
-            messagebox.showwarning(
-                TITLE, "That does not look like a link.\n\n"
-                       "A link starts with http:// or https://", parent=self)
+        text = self.url.get().strip()
+        links = batch.split_links(text)
+        if not links:
+            if not text:
+                self._say("Paste a link first.")
+            else:
+                messagebox.showwarning(
+                    TITLE, "That does not look like a link.\n\n"
+                           "A link starts with http:// or https://",
+                    parent=self)
             return
 
         ok, why = self.ensure_folder(self.cfg.base_dir)
@@ -160,11 +172,13 @@ class MainWindow(tk.Tk):
                        "Change it under Settings.", parent=self)
             return
 
-        job = self.manager.add(link, self._quality_key(),
-                               self.whole_playlist.get())
-        self.list.show(job)
+        quality = self._quality_key()
+        whole = self.whole_playlist.get()
+        for link in links:
+            self.list.show(self.manager.add(link, quality, whole))
         self.url.set("")
-        self._say(f"Added. {len(self.manager.active)} running or waiting.")
+        added = "Added." if len(links) == 1 else f"Added {len(links)} links."
+        self._say(f"{added} {len(self.manager.active)} running or waiting.")
 
     def _quality_key(self):
         index = self.quality.current()
@@ -185,6 +199,13 @@ class MainWindow(tk.Tk):
         started = self.manager.retry_all()
         if started:
             self._say(f"Trying {started} again.")
+
+    def _clear_done(self):
+        """Take the finished rows out, so a long list stays readable."""
+        for job_id in self.manager.clear_done():
+            self.list.remove(job_id)
+        self._show_buttons()
+        self._say(self.summary())
 
     def _open_job(self, job):
         target = job.path or job.dest
@@ -232,15 +253,17 @@ class MainWindow(tk.Tk):
                 postaction.run(self.cfg.after_download, job.path)
         if changed:
             self._say(self.summary())
-            self._show_retry_button()
+            self._show_buttons()
         self.after(POLL_MS, self._drain)
 
-    def _show_retry_button(self):
-        """The button is only there when there is something to try again."""
-        if self.manager.failed:
-            self.retry_button.grid()
-        else:
-            self.retry_button.grid_remove()
+    def _show_buttons(self):
+        """Each button is only there when it has something to do."""
+        for button, wanted in ((self.retry_button, self.manager.failed),
+                               (self.clear_button, self.manager.cleanable)):
+            if wanted:
+                button.grid()
+            else:
+                button.grid_remove()
 
     def summary(self):
         """One line counting what is happening, for the bottom of the window."""

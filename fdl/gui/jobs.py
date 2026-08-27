@@ -145,6 +145,25 @@ class Manager:
     def failed(self):
         return [job for job in self.jobs.values() if job.can_retry]
 
+    @property
+    def cleanable(self):
+        """Rows with nothing left to do, so they may leave the list.
+
+        A failed or stopped row stays: it still has a Retry button on it.
+        """
+        return [job for job in self.jobs.values()
+                if job.status in (DONE, SKIPPED)]
+
+    def clear_done(self):
+        """Take the finished rows out. Returns the ids that were removed.
+
+        The history keeps them, so nothing is really lost.
+        """
+        gone = [job.job_id for job in self.cleanable]
+        for job_id in gone:
+            self.jobs.pop(job_id, None)
+        return gone
+
     def cancel(self, job_id):
         job = self.jobs.get(job_id)
         if job and job.can_cancel:

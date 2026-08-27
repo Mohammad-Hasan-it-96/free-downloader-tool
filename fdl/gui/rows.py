@@ -138,6 +138,8 @@ class RowList(ttk.Frame):
         self._on_open = on_open
         self._on_retry = on_retry
         self.rows = {}
+        # The thin line under each row, kept so it can go when the row goes.
+        self.lines = {}
 
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
         scrollbar = ttk.Scrollbar(self, orient="vertical",
@@ -159,6 +161,12 @@ class RowList(ttk.Frame):
         self.canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        self.empty = None
+        self._show_empty()
+
+    def _show_empty(self):
+        if self.empty is not None:
+            return
         self.empty = ttk.Label(
             self.inner, foreground="#777777", padding=(10, 24),
             text="Nothing here yet.\nPaste a link above and press Add.")
@@ -198,12 +206,27 @@ class RowList(ttk.Frame):
             row = Row(self.inner, job, self._on_cancel, self._on_open,
                       self._on_retry)
             row.pack(fill="x", expand=True)
-            ttk.Separator(self.inner, orient="horizontal").pack(fill="x")
+            line = ttk.Separator(self.inner, orient="horizontal")
+            line.pack(fill="x")
             self.rows[job.job_id] = row
+            self.lines[job.job_id] = line
             # Show what was just added, instead of leaving it below the edge.
             # after_idle, because the new row has no size until Tk lays it out
             # and the scroll region is still the old one.
             self.canvas.after_idle(self._scroll_to_end)
         else:
             row.refresh()
+        self._resize_inner()
+
+    def remove(self, job_id):
+        """Take one row off the screen. Unknown ids are simply ignored."""
+        row = self.rows.pop(job_id, None)
+        if row is None:
+            return
+        row.destroy()
+        line = self.lines.pop(job_id, None)
+        if line is not None:
+            line.destroy()
+        if not self.rows:
+            self._show_empty()
         self._resize_inner()

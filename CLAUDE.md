@@ -195,7 +195,10 @@ computer, and each one has a trap behind it:
 
 `batch.py` is the queue: it probes every link first, builds a plan, then runs
 files through a thread pool while media links run one at a time (yt-dlp draws
-its own progress). `limiter.py` is one token bucket shared by all threads.
+its own progress). `split_links()` lives here rather than in the window,
+because turning pasted text into links is not a window's job: it splits on
+whitespace, then again before every `http`, so links glued together by a comma
+come apart while a comma inside a query string survives. `limiter.py` is one token bucket shared by all threads.
 `multiprogress.py` draws one line per download with ANSI cursor moves, and falls
 back to plain status lines when stdout is not a terminal. `log.py` redacts
 tokens and `user:pass@host` before writing.

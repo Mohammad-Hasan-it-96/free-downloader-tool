@@ -1,6 +1,7 @@
 """Download many links: check them, then run several at the same time."""
 
 import concurrent.futures
+import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,6 +84,28 @@ def dedupe(urls):
             seen.add(url)
             result.append(url)
     return result
+
+
+# Punctuation that gets copied along with a link. Brackets are left alone:
+# a Wikipedia address can really end in one.
+TRIM = "\"'<>,;"
+
+
+def split_links(text):
+    """Every http(s) link in a piece of pasted text, in order, no repeats.
+
+    People copy several links at once, and they arrive glued together by new
+    lines, spaces, or commas. Anything that is not a link is dropped, so a
+    stray word can never turn into a download.
+    """
+    found = []
+    for word in str(text or "").split():
+        # Two links stuck together, as happens when copying out of a table.
+        for piece in re.split(r"(?=https?://)", word):
+            piece = piece.strip(TRIM)
+            if piece.lower().startswith(("http://", "https://")):
+                found.append(piece)
+    return dedupe(found)
 
 
 def prepare(urls, cfg, history=None, workers=4, on_checked=None):

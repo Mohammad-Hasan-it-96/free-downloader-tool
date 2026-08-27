@@ -86,6 +86,57 @@ def test_dedupe_keeps_order():
     assert batch.dedupe(["b", "a", "b", "c", "a"]) == ["b", "a", "c"]
 
 
+def test_split_links_finds_one_plain_link():
+    assert batch.split_links("https://a.com/x.zip") == ["https://a.com/x.zip"]
+
+
+def test_split_links_reads_a_whole_pasted_block():
+    """People copy several links at once and press paste."""
+    pasted = """
+        https://a.com/1.zip
+        https://b.com/2.zip
+
+        https://c.com/3.zip
+    """
+    assert batch.split_links(pasted) == ["https://a.com/1.zip",
+                                         "https://b.com/2.zip",
+                                         "https://c.com/3.zip"]
+
+
+def test_split_links_separates_links_glued_together():
+    """Copying out of a table can leave them with no space between."""
+    assert batch.split_links("https://a.com/1.zip,https://b.com/2.zip") == [
+        "https://a.com/1.zip", "https://b.com/2.zip"]
+
+
+def test_split_links_drops_the_quotes_around_a_link():
+    assert batch.split_links('"https://a.com/x.zip"') == [
+        "https://a.com/x.zip"]
+
+
+def test_split_links_keeps_a_comma_inside_the_link_itself():
+    """A query can hold a comma. Cutting there would break the address."""
+    assert batch.split_links("https://a.com/get?ids=1,2") == [
+        "https://a.com/get?ids=1,2"]
+
+
+def test_split_links_keeps_brackets_that_belong_to_the_link():
+    address = "https://en.wikipedia.org/wiki/Rust_(programming_language)"
+    assert batch.split_links(address) == [address]
+
+
+def test_split_links_ignores_anything_that_is_not_a_link():
+    """A stray word must never turn into a download."""
+    assert batch.split_links("hello world") == []
+    assert batch.split_links("") == []
+    assert batch.split_links(None) == []
+
+
+def test_split_links_drops_a_link_pasted_twice():
+    assert batch.split_links("https://a.com/x https://a.com/x") == [
+        "https://a.com/x"]
+
+
 def test_classify_direct_link_is_a_file():
     assert batch.classify("https://example.com/tool.zip") == KIND_FILE
 

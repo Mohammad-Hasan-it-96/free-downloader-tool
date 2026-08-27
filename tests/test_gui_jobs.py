@@ -546,3 +546,42 @@ def test_closing_stops_everything(setup):
     manager.close()
 
     assert job.stop.is_set()
+
+
+# ------------------------- clearing the list -------------------------- #
+
+def test_only_rows_with_nothing_left_to_do_can_be_cleared(setup):
+    """A failed row keeps its Retry button, so it stays."""
+    manager, _cfg, _history = setup
+    for job_id, status in ((1, jobs.DONE), (2, jobs.SKIPPED),
+                           (3, jobs.FAILED), (4, jobs.CANCELLED),
+                           (5, jobs.RUNNING)):
+        manager.jobs[job_id] = jobs.Job(job_id=job_id, status=status)
+
+    assert sorted(job.job_id for job in manager.cleanable) == [1, 2]
+
+
+def test_clearing_takes_the_finished_rows_out(setup):
+    manager, _cfg, _history = setup
+    manager.jobs[1] = jobs.Job(job_id=1, status=jobs.DONE)
+    manager.jobs[2] = jobs.Job(job_id=2, status=jobs.FAILED)
+    manager.jobs[3] = jobs.Job(job_id=3, status=jobs.SKIPPED)
+
+    gone = manager.clear_done()
+
+    assert sorted(gone) == [1, 3]
+    assert list(manager.jobs) == [2]
+
+
+def test_clearing_an_empty_list_does_nothing(setup):
+    manager, _cfg, _history = setup
+    assert manager.clear_done() == []
+
+
+def test_a_cleared_row_does_not_come_back_in_the_summary(setup):
+    """The history keeps it; the list does not have to."""
+    manager, _cfg, _history = setup
+    manager.jobs[1] = jobs.Job(job_id=1, status=jobs.DONE)
+    manager.clear_done()
+    assert manager.cleanable == []
+    assert manager.failed == []

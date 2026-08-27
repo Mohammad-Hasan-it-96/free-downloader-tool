@@ -219,6 +219,12 @@ Three choices were made before any code:
 - ✅ **Retry**, on the row that failed and on all of them at once. The row
   is reused, the old error is cleared, and the part file is left alone so
   the download carries on instead of starting over.
+- ✅ **Many links in one paste.** A copied block is split into one row per
+  link, so a list no longer has to be added one line at a time.
+- ✅ **Clear done** empties the finished rows out of the list. Failed rows
+  stay, because Retry still applies to them.
+- ✅ The list scrolls with the mouse wheel, and a new row scrolls itself
+  into view.
 - ✅ The same routing as the menu, so a video page still goes to yt-dlp and a
   file link still goes to the fast downloader, with no question asked.
 - ✅ yt-dlp progress is read from its own output and shown as a real bar. The

@@ -56,12 +56,15 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 |  https://example.com/this-one-does-not-exist.zip  failed [Retry]|
 |  Attempt 2. The file was not found (404).                      |
 +----------------------------------------------------------------+
-|  [Settings]  1 done, 1 failed   [Retry failed] [Open folder]    |
+|  [Settings] 1 done, 1 failed [Clear done][Retry failed][Open..] |
 +----------------------------------------------------------------+
 ```
 
 - Paste a link and press **Add**. Several downloads run at once, each with
   its own bar.
+- **You can paste many links at once.** Copy a whole block of them, press
+  Paste, then Add. Every link becomes its own row. Anything in the text that
+  is not a link is ignored.
 - The tool still decides the engine by itself. **Video quality** and **whole
   playlist** are only used when the link turns out to be a video or audio
   page.
@@ -70,6 +73,9 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 - A row that failed gets a **Retry** button, and **Retry failed** at the
   bottom tries all of them at once. A retry continues from the byte the
   first try reached, so nothing is downloaded twice.
+- **Clear done** takes the finished rows out, so a long list stays readable.
+  Rows that failed stay, because they still have a Retry button. The history
+  keeps everything either way.
 - **Settings** covers the folder, sorting, speed, cookies, and updates.
 
 The window needs no extra install: it uses tkinter, which comes with Python
