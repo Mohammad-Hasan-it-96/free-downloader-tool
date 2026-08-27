@@ -73,6 +73,10 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 - A row that failed gets a **Retry** button, and **Retry failed** at the
   bottom tries all of them at once. A retry continues from the byte the
   first try reached, so nothing is downloaded twice.
+- **History** shows what was downloaded: what happened, the name, the time,
+  the size, and the folder. Pick a failed line and it tells you why. Pick a
+  finished one and **Open folder** shows the file. **Show the log** opens the
+  end of `fdl.log`, which is where to look when something went wrong.
 - **Downloads at the same time** works the moment you save it. A row that
   was held back says **waiting**, and starts as soon as there is room.
 - **Watch the clipboard** is a checkbox. While it is ticked, any link you
@@ -89,9 +93,8 @@ The window needs no extra install: it uses tkinter, which comes with Python
 on Windows and macOS. On Linux install `python3-tk` first. If the window
 cannot open, the tool says so and falls back to the text menu.
 
-**Still only in the text menu:** the queue from a `.txt` file, the history
-screen, checksums, a proxy, extra headers, and a folder
-for each type. Use `Free Downloader (terminal).bat` or `fdl` for those.
+**Still only in the text menu:** the queue from a `.txt` file, checksums, a
+proxy, extra headers, and a folder for each type. Use `Free Downloader (terminal).bat` or `fdl` for those.
 
 ## Main features
 
@@ -587,7 +590,7 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 457 tests cover file naming, categories, settings, history, the
+needed. 466 tests cover file naming, categories, settings, history, the
 queue, link routing, safety checks, checksums, the log, the clipboard, the
 proxy, logins in links, the speed limit, multi-connection downloads, where settings are stored, and real resume —
 including a server that cuts the connection in the middle, and the check that

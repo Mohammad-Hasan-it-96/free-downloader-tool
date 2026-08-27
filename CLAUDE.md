@@ -203,6 +203,15 @@ come apart while a comma inside a query string survives. `limiter.py` is one tok
 back to plain status lines when stdout is not a terminal. `log.py` redacts
 tokens and `user:pass@host` before writing.
 
+What reaches the history is a rule, not an accident. **Done** and **failed**
+go in; **skipped** does not, because a link is skipped precisely because it is
+already there; and a **stop by the user** does not either. The trap is that a
+link failing the *check* never reaches the downloader, so `Manager._run` has
+to record those two cases itself - the plain check failure and the safety
+block. `app.py` does the same thing for the terminal queue, with a comment
+saying so. Miss it and a 404 shows as failed in the list but leaves no trace
+in the history window.
+
 `jobs._Gate` is why "Downloads at the same time" works without a restart. A
 `ThreadPoolExecutor` cannot be resized, so the pool is built at `MAX_PARALLEL`
 and the gate decides how many of its threads may work. Two rules: lowering the

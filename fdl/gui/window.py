@@ -11,6 +11,7 @@ import webbrowser
 from tkinter import messagebox, ttk
 
 from . import console, jobs as job_state
+from .history_dialog import HistoryDialog
 from .rows import RowList
 from .settings_dialog import SettingsDialog
 from .. import (batch, clipboard, log, paths, postaction, updates,
@@ -37,6 +38,7 @@ class MainWindow(tk.Tk):
         self.history = history
         self.ensure_folder = ensure_folder
         self.manager = job_state.Manager(cfg, toolbox, history)
+        self._history_window = None
         self.update_check = updates.BackgroundCheck().start(cfg)
 
         self.title(TITLE)
@@ -133,22 +135,24 @@ class MainWindow(tk.Tk):
 
         bottom = ttk.Frame(outer)
         bottom.grid(row=4, column=0, sticky="ew", pady=(8, 0))
-        bottom.columnconfigure(1, weight=1)
+        bottom.columnconfigure(2, weight=1)
         ttk.Button(bottom, text="Settings", command=self._settings).grid(
             row=0, column=0)
+        ttk.Button(bottom, text="History", command=self._open_history).grid(
+            row=0, column=1, padx=(6, 0))
         self.status = ttk.Label(bottom, text="", foreground="#555555",
                                 font=("Segoe UI", 9))
-        self.status.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self.status.grid(row=0, column=2, sticky="w", padx=(12, 0))
         self.clear_button = ttk.Button(bottom, text="Clear done",
                                        command=self._clear_done)
-        self.clear_button.grid(row=0, column=2, padx=(6, 0))
+        self.clear_button.grid(row=0, column=3, padx=(6, 0))
         self.clear_button.grid_remove()
         self.retry_button = ttk.Button(bottom, text="Retry failed",
                                        command=self._retry_all)
-        self.retry_button.grid(row=0, column=3, padx=(6, 6))
+        self.retry_button.grid(row=0, column=4, padx=(6, 6))
         self.retry_button.grid_remove()
         ttk.Button(bottom, text="Open folder",
-                   command=self._open_base_folder).grid(row=0, column=4)
+                   command=self._open_base_folder).grid(row=0, column=5)
 
         self._refresh_folder()
         self._check_tools()
@@ -298,6 +302,14 @@ class MainWindow(tk.Tk):
                                  parent=self)
             return
         postaction.open_folder(self.cfg.base_dir)
+
+    def _open_history(self):
+        """Only ever one history window: a second one would go stale."""
+        if (self._history_window is not None
+                and self._history_window.winfo_exists()):
+            self._history_window.lift()
+            return
+        self._history_window = HistoryDialog(self, self.history)
 
     def _settings(self):
         dialog = SettingsDialog(self, self.cfg, self.ensure_folder)

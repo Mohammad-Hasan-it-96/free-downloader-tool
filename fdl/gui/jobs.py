@@ -293,14 +293,20 @@ class Manager:
         job.warnings = list(item.warnings or [])
 
         if item.status == batch.STATUS_SKIPPED:
+            # Not recorded: it is skipped because it is already in the
+            # history, and a second entry would say nothing new.
             self._finish(job, SKIPPED, message=item.note)
             return
+        # A link that fails the check never reaches the downloader, so these
+        # two have to write it down themselves.
         if item.status == batch.STATUS_FAILED:
+            self._record(job, FAILED, item.error)
             self._finish(job, FAILED, item.error)
             return
 
         blocked = self._safety_problem(item)
         if blocked:
+            self._record(job, FAILED, blocked)
             self._finish(job, FAILED, blocked)
             return
 

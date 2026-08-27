@@ -676,3 +676,56 @@ def test_the_number_is_never_zero(setup):
     manager, _cfg, _history = setup
     manager.set_parallel(0)
     assert manager.parallel == 1
+
+
+def test_a_link_that_fails_the_check_still_reaches_the_history(setup,
+                                                               monkeypatch):
+    """It never reaches the downloader, so nothing else would write it down.
+
+    Without this, a 404 shows as failed in the list and then leaves no trace
+    at all in the history window.
+    """
+    manager, _cfg, history = setup
+    broken = Item(url="https://example.com/gone.zip", kind=KIND_FILE)
+    broken.status = jobs.batch.STATUS_FAILED
+    broken.error = "The file was not found (404)."
+    give_prepare(monkeypatch, broken)
+    manager._ids = iter([1])
+
+    job = manager.add("https://example.com/gone.zip")
+
+    assert job.status == jobs.FAILED
+    assert len(history.rows) == 1
+    assert history.rows[0][1] == "failed"
+
+
+def test_a_link_stopped_by_a_safety_check_is_recorded(setup, monkeypatch,
+                                                      tmp_path):
+    """A login page instead of the file. The user should find out why later."""
+    manager, _cfg, history = setup
+    give_prepare(monkeypatch, file_item(tmp_path))
+    monkeypatch.setattr(jobs.safety, "looks_like_a_login_page",
+                        lambda _info: True)
+    manager._ids = iter([1])
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.FAILED
+    assert len(history.rows) == 1
+
+
+def test_a_link_already_downloaded_is_not_written_down_twice(setup,
+                                                            monkeypatch,
+                                                            tmp_path):
+    """It is skipped because it is already there. Saying so again is noise."""
+    manager, _cfg, history = setup
+    known = file_item(tmp_path)
+    known.status = jobs.batch.STATUS_SKIPPED
+    known.note = "already downloaded"
+    give_prepare(monkeypatch, known)
+    manager._ids = iter([1])
+
+    job = manager.add("https://example.com/thing.zip")
+
+    assert job.status == jobs.SKIPPED
+    assert history.rows == []

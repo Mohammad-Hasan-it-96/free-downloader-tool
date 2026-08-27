@@ -225,6 +225,10 @@ Three choices were made before any code:
   stay, because Retry still applies to them.
 - ✅ The list scrolls with the mouse wheel, and a new row scrolls itself
   into view.
+- ✅ **History** and **the log** have windows of their own, so the window is
+  no longer missing the answer to "what did I download?" and "why did that
+  fail?". Building it found a real bug: a link that failed the *check* was
+  never written to the history at all.
 - ✅ **Downloads at the same time** changes while the app is open. A pool
   cannot be resized, so the pool is built at the largest size allowed and a
   gate decides how many of its threads may work.
@@ -255,8 +259,8 @@ Three choices were made before any code:
 
 **Still terminal only**
 
-The queue from a `.txt` file, the history screen, checksums, a proxy, extra
-headers, and a folder for each type. These are tabs for a later version.
+The queue from a `.txt` file, checksums, a proxy, extra headers, and a folder
+for each type. These are tabs for a later version.
 
 ## Maybe later
 
