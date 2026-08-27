@@ -203,6 +203,12 @@ come apart while a comma inside a query string survives. `limiter.py` is one tok
 back to plain status lines when stdout is not a terminal. `log.py` redacts
 tokens and `user:pass@host` before writing.
 
+`history.STATUS_STOPPED` is a status that exists only in memory. A download
+the user stopped is never written to `history.json`: the part file is still
+there, Retry continues from it, and recording every change of mind would fill
+the list with the same link. Both front ends must keep that rule -
+`batch._download_one` and `Manager._stopped`.
+
 ## Things that bite
 
 - **Proxy.** `http_engine._urlopen` bypasses the proxy for loopback hosts before

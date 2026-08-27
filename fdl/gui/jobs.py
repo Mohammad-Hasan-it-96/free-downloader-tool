@@ -272,8 +272,7 @@ class Manager:
                 speed_limit=self.cfg.speed_limit_bytes,
                 on_progress=on_progress, stop_event=job.stop)
         except KeyboardInterrupt:
-            self._record(job, FAILED, "stopped by the user")
-            self._finish(job, CANCELLED, message="cancelled")
+            self._stopped(job)
             return
         except DownloadError as err:
             self._record(job, FAILED, str(err))
@@ -328,8 +327,7 @@ class Manager:
             on_line=on_line, stop_event=job.stop)
 
         if job.stop.is_set():
-            self._record(job, FAILED, "stopped by the user")
-            self._finish(job, CANCELLED, message="cancelled")
+            self._stopped(job)
             return
         if code == 0:
             job.path = job.dest
@@ -348,6 +346,16 @@ class Manager:
                 "cookies in Settings.")
         self._record(job, FAILED, reason)
         self._finish(job, FAILED, reason)
+
+    def _stopped(self, job):
+        """The user pressed Stop, which is not a failure.
+
+        Nothing goes in the history. The part file is kept, Retry carries on
+        from it, and a record for every change of mind would only fill the
+        list with the same link.
+        """
+        log.info("gui stopped: %s", log.redact(job.url))
+        self._finish(job, CANCELLED, message="cancelled")
 
     # ------------------------------ history ------------------------------ #
 

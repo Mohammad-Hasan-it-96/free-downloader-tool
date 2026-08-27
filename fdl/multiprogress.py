@@ -15,7 +15,8 @@ class Row:
         self.label = label
         self.done = 0
         self.total = None
-        self.status = "waiting"   # waiting, running, done, failed, skipped
+        # waiting, running, done, failed, skipped, stopped
+        self.status = "waiting"
         self.message = ""
         self.started = None
         self._done_at_start = 0
@@ -118,7 +119,7 @@ class MultiProgress:
 
     def _line(self, index, row, width):
         marks = {"waiting": " ", "running": ">", "done": "+",
-                 "failed": "x", "skipped": "-"}
+                 "failed": "x", "skipped": "-", "stopped": "-"}
         mark = marks.get(row.status, " ")
         label = row.label
         max_label = max(12, min(38, width - 46))
@@ -138,7 +139,7 @@ class MultiProgress:
                 tail = human_size(row.done)
         elif row.status == "done":
             tail = f"done  {human_size(row.total or row.done)}"
-        elif row.status in ("failed", "skipped"):
+        elif row.status in ("failed", "skipped", "stopped"):
             tail = row.message or row.status
         else:
             tail = "waiting"

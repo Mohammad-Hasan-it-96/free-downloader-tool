@@ -8,7 +8,8 @@ from pathlib import Path
 
 from . import http_engine, log, router, safety, ytdlp_engine
 from .categories import category_for
-from .history import STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED
+from .history import (STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED,
+                      STATUS_STOPPED)
 from .http_engine import DownloadError
 from .router import KIND_FILE, KIND_MEDIA
 
@@ -45,12 +46,15 @@ class Summary:
     done: list = field(default_factory=list)
     failed: list = field(default_factory=list)
     skipped: list = field(default_factory=list)
+    stopped: list = field(default_factory=list)
 
     def add(self, item):
         if item.status == STATUS_DONE:
             self.done.append(item)
         elif item.status == STATUS_SKIPPED:
             self.skipped.append(item)
+        elif item.status == STATUS_STOPPED:
+            self.stopped.append(item)
         else:
             self.failed.append(item)
 
@@ -252,10 +256,10 @@ def _download_one(index, item, cfg, progress, history, stop):
         if progress:
             progress.finish(index, STATUS_FAILED, _short(str(err)))
     except KeyboardInterrupt:
-        item.status = STATUS_FAILED
+        item.status = STATUS_STOPPED
         item.error = "stopped by the user"
         if progress:
-            progress.finish(index, STATUS_FAILED, "stopped")
+            progress.finish(index, STATUS_STOPPED, "stopped")
     else:
         item.status = STATUS_DONE
         item.path = saved
@@ -264,10 +268,14 @@ def _download_one(index, item, cfg, progress, history, stop):
 
     if item.status == STATUS_DONE:
         log.info("queue done: %s -> %s", log.redact(item.url), item.path)
+    elif item.status == STATUS_STOPPED:
+        log.info("queue stopped: %s", log.redact(item.url))
     else:
         log.error("queue failed: %s (%s)", log.redact(item.url), item.error)
 
-    if history:
+    # A stop is not a result worth keeping. The part file is still there, so
+    # the download can carry on later.
+    if history and item.status != STATUS_STOPPED:
         history.add(item.url, item.status, path=item.path, size=item.size,
                     category=item.category, engine="file",
                     error=item.error or None)

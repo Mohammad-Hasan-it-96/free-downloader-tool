@@ -468,6 +468,10 @@ error. Links that were downloaded before are skipped automatically, as long
 as the file is still on the disk. The history is stored in `history.json`
 next to the app, and you can clear it from the same screen.
 
+A download **you** stopped is not written down. It is not a failure: the part
+of the file is kept, and Retry carries on from it. Only real results go in,
+so the same link cannot fill the list every time you change your mind.
+
 ## Playlists
 
 If the link contains `list=`, the app asks:
@@ -574,7 +578,7 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 247 tests cover file naming, categories, settings, history, the
+needed. 444 tests cover file naming, categories, settings, history, the
 queue, link routing, safety checks, checksums, the log, the clipboard, the
 proxy, logins in links, the speed limit, multi-connection downloads, where settings are stored, and real resume —
 including a server that cuts the connection in the middle, and the check that

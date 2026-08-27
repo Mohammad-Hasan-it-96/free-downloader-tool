@@ -225,7 +225,9 @@ def test_a_job_stopped_while_running_ends_as_cancelled(setup, monkeypatch,
     job = manager.add("https://example.com/thing.zip")
 
     assert job.status == jobs.CANCELLED
-    assert history.rows[0][1] == "failed"
+    # A stop is not a failure. Nothing is written down: the part file is kept
+    # and Retry carries on from it.
+    assert history.rows == []
 
 
 def test_cancel_before_the_work_starts(setup):
@@ -585,3 +587,21 @@ def test_a_cleared_row_does_not_come_back_in_the_summary(setup):
     manager.clear_done()
     assert manager.cleanable == []
     assert manager.failed == []
+
+
+def test_a_stopped_media_download_is_not_recorded(setup, monkeypatch):
+    """The same rule for a video page as for a file."""
+    manager, _cfg, history = setup
+    give_prepare(monkeypatch, media_item())
+
+    def streaming(*_a, **kwargs):
+        manager.jobs[1].stop.set()
+        return 1
+
+    monkeypatch.setattr(jobs.ytdlp_engine, "run_streaming", streaming)
+    manager._ids = iter([1])
+
+    job = manager.add("https://youtube.com/watch?v=abc")
+
+    assert job.status == jobs.CANCELLED
+    assert history.rows == []

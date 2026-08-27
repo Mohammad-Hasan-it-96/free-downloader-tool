@@ -240,6 +240,28 @@ def test_queue_records_everything_in_history(server, cfg, tmp_path):
     assert {e["category"] for e in history.entries} == {"Audio", "Documents"}
 
 
+def test_stopping_a_download_is_not_written_to_the_history(server, cfg,
+                                                          tmp_path,
+                                                          monkeypatch):
+    """The user changed their mind. That is not a result worth keeping.
+
+    The part file stays on the disk, so the download can carry on later.
+    Recording it would fill the history with the same link over and over.
+    """
+    history = History(tmp_path / "history.json")
+    items = batch.prepare([f"{server}/song.mp3"], cfg, history)
+
+    def stopped(*_args, **_kwargs):
+        raise KeyboardInterrupt("the user pressed a key")
+
+    monkeypatch.setattr(batch.http_engine, "download", stopped)
+    summary = batch.run_files(items, cfg, workers=1, history=history)
+
+    assert history.entries == []
+    assert len(summary.stopped) == 1
+    assert summary.failed == []
+
+
 def test_queue_keeps_going_when_one_link_fails(server, cfg):
     items = batch.prepare([f"{server}/song.mp3", f"{server}/missing.zip",
                            f"{server}/book.pdf"], cfg)

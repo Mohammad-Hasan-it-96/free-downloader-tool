@@ -225,6 +225,9 @@ Three choices were made before any code:
   stay, because Retry still applies to them.
 - ✅ The list scrolls with the mouse wheel, and a new row scrolls itself
   into view.
+- ✅ Pressing Stop no longer writes a "failed" line in the history. A stop is
+  not a result: the part file is kept and Retry carries on from it. The same
+  now holds for the queue in the terminal.
 - ✅ The same routing as the menu, so a video page still goes to yt-dlp and a
   file link still goes to the fast downloader, with no question asked.
 - ✅ yt-dlp progress is read from its own output and shown as a real bar. The

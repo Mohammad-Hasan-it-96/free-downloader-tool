@@ -8,6 +8,9 @@ from pathlib import Path
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 STATUS_SKIPPED = "skipped"
+# A download the user stopped. It is never written to the file: the part is
+# still on the disk, and a record of every change of mind is only noise.
+STATUS_STOPPED = "stopped"
 
 
 def now_text():
