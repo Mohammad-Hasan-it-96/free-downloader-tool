@@ -225,6 +225,8 @@ Three choices were made before any code:
   stay, because Retry still applies to them.
 - ✅ The list scrolls with the mouse wheel, and a new row scrolls itself
   into view.
+- ✅ **Playlist progress.** The row names the video it is on, and one bar
+  measures the whole playlist instead of restarting at each video.
 - ✅ **History** and **the log** have windows of their own, so the window is
   no longer missing the answer to "what did I download?" and "why did that
   fail?". Building it found a real bug: a link that failed the *check* was

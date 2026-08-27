@@ -220,3 +220,75 @@ def test_every_status_has_a_colour_and_a_word():
                    jobs.FAILED, jobs.SKIPPED, jobs.CANCELLED):
         assert status in rows.COLOURS
         assert status in rows.WORDS
+
+
+# ---------------------------- playlists --------------------------------- #
+
+ESCAPE = chr(27)          # written this way so no invisible byte lands here
+
+
+def test_the_playlist_line_gives_the_position():
+    assert ytdlp_engine.parse_item(
+        "[download] Downloading item 3 of 12") == (3, 12)
+
+
+def test_the_older_wording_still_works():
+    """Older versions of yt-dlp said 'video' instead of 'item'."""
+    assert ytdlp_engine.parse_item(
+        "[download] Downloading video 1 of 5") == (1, 5)
+
+
+def test_colour_codes_around_the_numbers_are_ignored():
+    """yt-dlp paints the numbers when it thinks it has a terminal."""
+    line = (ESCAPE + "[0;36m[download]" + ESCAPE + "[0m Downloading item "
+            + ESCAPE + "[38;5;6m7" + ESCAPE + "[0m of "
+            + ESCAPE + "[1m40" + ESCAPE + "[0m")
+    assert ytdlp_engine.parse_item(line) == (7, 40)
+
+
+def test_a_progress_line_is_not_a_playlist_line():
+    assert ytdlp_engine.parse_item(
+        "[download]  75.5% of 10.00MiB at 1.00MiB/s ETA 00:02") is None
+
+
+def test_text_that_only_looks_like_a_colour_code_is_left_alone():
+    """The pattern must want a real escape byte, not any '[12m' in the text."""
+    assert ytdlp_engine.parse_item("a fake [12m marker, not a colour") is None
+
+
+def test_numbers_that_make_no_sense_are_refused():
+    assert ytdlp_engine.parse_item("[download] Downloading item 0 of 3") is None
+    assert ytdlp_engine.parse_item("[download] Downloading item 5 of 3") is None
+
+
+def test_one_bar_for_the_whole_playlist():
+    """Video 3 of 12, half done, is (2 + 0.5) of 12 of the work."""
+    assert jobs.overall_percent(3, 12, 50.0) == pytest.approx(20.833, abs=0.01)
+    assert jobs.overall_percent(1, 12, 0.0) == 0.0
+    assert jobs.overall_percent(12, 12, 100.0) == 100.0
+
+
+def test_a_single_video_keeps_its_own_percent():
+    """There is no playlist, so there is nothing to divide."""
+    assert jobs.overall_percent(0, 0, 42.0) == 42.0
+    assert jobs.overall_percent(1, 1, 42.0) == 42.0
+
+
+def test_the_playlist_bar_never_goes_backwards():
+    """Every new video must start at least where the last one finished."""
+    end_of_third = jobs.overall_percent(3, 12, 100.0)
+    start_of_fourth = jobs.overall_percent(4, 12, 0.0)
+    assert start_of_fourth == pytest.approx(end_of_third)
+
+
+def test_a_running_playlist_row_says_which_video():
+    job = jobs.Job(status=jobs.RUNNING, item_index=3, item_total=12)
+    assert rows.right_text(job) == "video 3 of 12"
+
+
+def test_a_single_video_row_does_not_say_video_1_of_1():
+    """That would be noise. One video is just one download."""
+    job = jobs.Job(status=jobs.RUNNING, item_index=1, item_total=1,
+                   message="[download] Destination: clip.mp4")
+    assert rows.playlist_text(job) == ""
+    assert rows.right_text(job) == "[download] Destination: clip.mp4"

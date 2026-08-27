@@ -203,6 +203,14 @@ come apart while a comma inside a query string survives. `limiter.py` is one tok
 back to plain status lines when stdout is not a terminal. `log.py` redacts
 tokens and `user:pass@host` before writing.
 
+`ytdlp_engine.parse_item()` reads `[download] Downloading item 3 of 12` and
+`jobs.overall_percent()` turns that into one bar for the whole playlist. Two
+things to know: the pattern must strip real escape bytes (`\x1b[...m`), because
+yt-dlp colours those numbers when it thinks it has a terminal, and a pattern
+loose enough to match any `[12m` in ordinary text would corrupt it; and the
+item line announces straight away instead of waiting behind the 0.15 s
+throttle, which only exists to stop percent ticks flooding the window.
+
 What reaches the history is a rule, not an accident. **Done** and **failed**
 go in; **skipped** does not, because a link is skipped precisely because it is
 already there; and a **stop by the user** does not either. The trap is that a

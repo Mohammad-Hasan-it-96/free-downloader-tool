@@ -39,6 +39,20 @@ MAX_PARALLEL = 8
 UPDATE_SECONDS = 0.15
 
 
+def overall_percent(index, total, percent):
+    """One bar for a whole playlist, instead of one that keeps restarting.
+
+    Video 3 of 12, half way through, is (2 + 0.5) out of 12 of the work.
+    A single video has no playlist, so its own percent is the answer.
+    """
+    if total < 2:
+        return max(0.0, min(100.0, percent))
+    index = max(1, min(index, total))
+    percent = max(0.0, min(100.0, percent))
+    finished = index - 1 + percent / 100.0
+    return max(0.0, min(100.0, finished * 100.0 / total))
+
+
 class _Gate:
     """Lets only so many downloads run at the same time.
 
@@ -117,6 +131,9 @@ class Job:
     quality: str = "1"
     whole_playlist: bool = False
     attempts: int = 1
+    # Where a playlist has got to. Both stay 0 for a single download.
+    item_index: int = 0
+    item_total: int = 0
 
     @property
     def label(self):
@@ -129,6 +146,10 @@ class Job:
     @property
     def can_cancel(self):
         return self.status in (CHECKING, WAITING, RUNNING)
+
+    @property
+    def is_playlist(self):
+        return self.item_total > 1
 
     @property
     def can_retry(self):
@@ -193,6 +214,8 @@ class Manager:
         job.done_bytes = 0
         job.speed = 0.0
         job.path = None
+        job.item_index = 0
+        job.item_total = 0
         job.attempts += 1
         # A fresh one: the old event is still set from the last stop.
         job.stop = threading.Event()
@@ -389,9 +412,24 @@ class Manager:
         errors = []
 
         def on_line(line):
+            step = ytdlp_engine.parse_item(line)
             percent = ytdlp_engine.parse_progress(line)
+            if step is not None:
+                job.item_index, job.item_total = step
+                # The new video starts at nothing, but the ones before it
+                # are done, so the bar goes forward and never back.
+                job.percent = overall_percent(job.item_index,
+                                              job.item_total, 0.0)
+                # Moving to the next video is news, not a percent tick, so
+                # it never waits behind the throttle below. A short clip can
+                # be over in less time than the throttle, and the row would
+                # then keep naming a video that finished long ago.
+                last[0] = time.monotonic()
+                self._announce(job)
+                return
             if percent is not None:
-                job.percent = percent
+                job.percent = overall_percent(job.item_index,
+                                              job.item_total, percent)
             elif ytdlp_engine.is_error_line(line):
                 # The exit code is always 1, so this line is the only place
                 # that ever says what really went wrong.

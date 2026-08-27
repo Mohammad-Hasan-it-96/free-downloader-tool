@@ -73,6 +73,9 @@ Double-click **`Free Downloader.bat`**, or run `fdl-gui`.
 - A row that failed gets a **Retry** button, and **Retry failed** at the
   bottom tries all of them at once. A retry continues from the byte the
   first try reached, so nothing is downloaded twice.
+- **A playlist gets one bar, not twelve.** The row says `video 3 of 12`, and
+  the bar measures the whole playlist, so it fills once instead of starting
+  again at every video.
 - **History** shows what was downloaded: what happened, the name, the time,
   the size, and the folder. Pick a failed line and it tells you why. Pick a
   finished one and **Open folder** shows the file. **Show the log** opens the
@@ -590,7 +593,7 @@ python -m pytest
 ```
 
 The tests start a small web server on your own computer, so no internet is
-needed. 466 tests cover file naming, categories, settings, history, the
+needed. 477 tests cover file naming, categories, settings, history, the
 queue, link routing, safety checks, checksums, the log, the clipboard, the
 proxy, logins in links, the speed limit, multi-connection downloads, where settings are stored, and real resume —
 including a server that cuts the connection in the middle, and the check that

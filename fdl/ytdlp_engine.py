@@ -196,6 +196,16 @@ def build_args_quiet(url, out_dir, selector, height, has_ffmpeg, extra=()):
 
 PERCENT = re.compile(r"\[download\]\s+(\d{1,3}(?:\.\d+)?)%")
 
+# A playlist prints one of these before each video:
+#     [download] Downloading item 3 of 12
+# Older versions of yt-dlp said "video" instead of "item". When the output
+# goes to a real terminal the numbers carry colour codes, so those are taken
+# off first.
+ITEM = re.compile(
+    r"\[download\]\s+Downloading\s+(?:item|video)\s+(\d+)\s+of\s+(\d+)",
+    re.IGNORECASE)
+COLOUR_CODES = re.compile(r"\x1b\[[0-9;]*m")
+
 # yt-dlp says why it stopped in its output. The exit code is always 1, so
 # "stopped with code 1" tells the user nothing at all. These read the real
 # line, and turn the two most common ones into something a person can act on.
@@ -269,6 +279,17 @@ def parse_progress(line):
     if not match:
         return None
     return max(0.0, min(100.0, float(match.group(1))))
+
+
+def parse_item(line):
+    """'[download] Downloading item 3 of 12' -> (3, 12), else None."""
+    found = ITEM.search(COLOUR_CODES.sub("", line or ""))
+    if not found:
+        return None
+    index, total = int(found.group(1)), int(found.group(2))
+    if total < 1 or not 1 <= index <= total:
+        return None
+    return index, total
 
 
 def _no_console_flag():

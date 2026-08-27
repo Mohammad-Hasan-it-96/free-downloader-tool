@@ -39,11 +39,24 @@ def size_text(job):
     return f"{human_size(job.done_bytes)} of {human_size(job.total_bytes)}"
 
 
+def playlist_text(job):
+    """'video 3 of 12', so a playlist does not look like one download."""
+    if not job.is_playlist:
+        return ""
+    return f"video {job.item_index} of {job.item_total}"
+
+
 def right_text(job):
     """The line under the name: what is happening, in plain words."""
     if job.status == job_state.RUNNING:
-        parts = [p for p in (size_text(job), speed_text(job.speed)) if p]
-        return "   ".join(parts) or "starting..."
+        parts = [p for p in (playlist_text(job), size_text(job),
+                             speed_text(job.speed)) if p]
+        if parts:
+            return "   ".join(parts)
+        # A video page gives no size or speed here, so the last thing yt-dlp
+        # said is more use than a line that says "starting..." for ten
+        # minutes.
+        return job.message or "starting..."
     if job.status == job_state.DONE:
         return job.message or "done"
     if job.status in (job_state.FAILED, job_state.SKIPPED,
